@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getStateInstance, sendMessage } from '@/lib/green-api';
 
 export default function Home() {
   const [dbStatus, setDbStatus] = useState<string>('Checking DB...');
@@ -16,7 +15,8 @@ export default function Home() {
   useEffect(() => {
     async function checkStatus() {
       try {
-        const data = await getStateInstance();
+        const res = await fetch('/api/wa-status');
+        const data = await res.json();
         setStatus(data.stateInstance || 'Unknown');
       } catch (error) {
         setStatus('Error connecting to Green API');
@@ -41,7 +41,12 @@ export default function Home() {
     e.preventDefault();
     setLoading(true);
     try {
-      const data = await sendMessage(phoneNumber, message);
+      const res = await fetch('/api/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber, message }),
+      });
+      const data = await res.json();
       setResult(data);
     } catch (error) {
       setResult({ error: 'Failed to send message' });
