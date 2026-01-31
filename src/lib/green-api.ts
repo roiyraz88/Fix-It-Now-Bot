@@ -56,13 +56,24 @@ export async function sendMessage(
     body: JSON.stringify(body),
   });
 
+  const responseText = await response.text();
+
   if (!response.ok) {
-    const errorData = await response.json();
-    console.error('Green API Error Response:', JSON.stringify(errorData, null, 2));
-    throw new Error(errorData.message || `Green API error: ${response.status}`);
+    console.error('Green API Error Response:', responseText);
+    try {
+      const errorData = JSON.parse(responseText);
+      throw new Error(errorData.message || `Green API error: ${response.status}`);
+    } catch {
+      throw new Error(`Green API error: ${response.status} - ${responseText.substring(0, 100)}`);
+    }
   }
 
-  return response.json();
+  try {
+    return JSON.parse(responseText);
+  } catch (err) {
+    console.error('Failed to parse Green API response as JSON:', responseText);
+    throw new Error('Green API returned non-JSON response');
+  }
 }
 
 /**
@@ -91,13 +102,24 @@ export async function sendButtons(
     body: JSON.stringify(body),
   });
 
+  const responseText = await response.text();
+
   if (!response.ok) {
-    const errorData = await response.json();
-    console.error('Green API Error Response:', JSON.stringify(errorData, null, 2));
-    throw new Error(errorData.message || `Green API error: ${response.status}`);
+    console.error('Green API Error Response:', responseText);
+    try {
+      const errorData = JSON.parse(responseText);
+      throw new Error(errorData.message || `Green API error: ${response.status}`);
+    } catch {
+      throw new Error(`Green API error: ${response.status} - ${responseText.substring(0, 100)}`);
+    }
   }
 
-  return response.json();
+  try {
+    return JSON.parse(responseText);
+  } catch (err) {
+    console.error('Failed to parse Green API response as JSON:', responseText);
+    throw new Error('Green API returned non-JSON response');
+  }
 }
 
 export async function getSettings() {
