@@ -33,7 +33,13 @@ export async function findAndNotifyProfessionals(jobId: string) {
   for (const pro of professionals) {
     const cleanPhone = pro.phone.replace(/\D/g, '');
     try {
-      await sendButtons(cleanPhone, message, buttons, 'FixItNow - הצעת מחיר בלחיצת כפתור');
+      await sendButtons(
+        cleanPhone, 
+        message, 
+        buttons, 
+        'FixItNow - הצעת מחיר בלחיצת כפתור',
+        '🛠️ עבודה חדשה זמינה!'
+      );
       console.log(`Alert sent to ${pro.name} for job #${job.shortId} with button`);
     } catch (err) {
       console.error(`Failed to notify ${pro.name}:`, (err as Error).message);

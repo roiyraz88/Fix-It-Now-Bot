@@ -256,17 +256,23 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
         proProfile += `\n*קצת עלי:* ${pro.aboutMe}`;
       }
       
-      const offerMsg = `✨ *קיבלתי הצעה חדשה עבור העבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.price} ₪\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
+      const offerMsg = `✨ *הצעה חדשה לעבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.price} ₪\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
       
       const buttons = [
         { buttonId: `accept_offer_${offer._id}`, buttonText: 'אני בוחר בהצעה זו' }
       ];
 
       try {
-        await sendButtons(`${job.clientPhone}@c.us`, offerMsg, buttons, 'לחץ על הכפתור לאישור ההצעה');
+        await sendButtons(
+          `${job.clientPhone}@c.us`, 
+          offerMsg, 
+          buttons, 
+          'לחץ על הכפתור לאישור',
+          'FixItNow - הצעת מחיר'
+        );
       } catch (err) {
-        console.error('Failed to send buttons to client, falling back to text:', err);
-        const fallbackMsg = offerMsg + `\n\nהאם תרצה לקבל את ההצעה? השב עם השם של בעל המקצוע: *${pro.name}*`;
+        console.error('Failed to send buttons to client:', (err as Error).message);
+        const fallbackMsg = offerMsg + `\n\n*לאישור ההצעה השב:* ${pro.name}`;
         await sendMessage(`${job.clientPhone}@c.us`, fallbackMsg);
       }
     }
