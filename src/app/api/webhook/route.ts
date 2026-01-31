@@ -26,12 +26,22 @@ export async function POST(request: Request) {
     let incomingText = '';
     let selectedButtonId = '';
 
-    if (body.messageData?.typeMessage === 'buttonsResponseMessage') {
-      selectedButtonId = body.messageData.buttonsResponseMessageData?.selectedButtonId || '';
-      incomingText = body.messageData.buttonsResponseMessageData?.selectedButtonText || '';
+    // Improved button detection
+    const messageData = body.messageData;
+    if (messageData?.typeMessage === 'buttonsResponseMessage') {
+      selectedButtonId = messageData.buttonsResponseMessageData?.selectedButtonId || '';
+      incomingText = messageData.buttonsResponseMessageData?.selectedButtonText || '';
+    } else if (messageData?.typeMessage === 'templateButtonsReplyMessage') {
+      selectedButtonId = messageData.templateButtonsReplyMessageData?.selectedButtonId || '';
+      incomingText = messageData.templateButtonsReplyMessageData?.selectedButtonText || '';
     } else {
-      incomingText = body.messageData?.textMessageData?.textMessage || 
-                     body.messageData?.extendedTextMessageData?.text || '';
+      incomingText = messageData?.textMessageData?.textMessage || 
+                     messageData?.extendedTextMessageData?.text || '';
+    }
+
+    // Logging for debugging (will show in Vercel)
+    if (selectedButtonId) {
+      console.log(`Button Pressed: ID=${selectedButtonId}, Text=${incomingText}`);
     }
 
     await dbConnect();
@@ -41,7 +51,6 @@ export async function POST(request: Request) {
       await ConversationState.deleteOne({ phone });
       await ProfessionalState.deleteOne({ phone });
       
-      // Create fresh state so next message goes to 'welcome' handler
       await ConversationState.create({ 
         phone, 
         state: 'welcome', 
@@ -52,15 +61,26 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'ok' });
     }
 
-    // 1. Check if it's a professional starting a flow (via button or text)
+    // 1. Check if it's a professional starting a flow
     const proState = await ProfessionalState.findOne({ phone });
 
+    // Identify job ID from button or text
+    let jobIdFromMessage = '';
     if (selectedButtonId.startsWith('job_')) {
-      const shortId = parseInt(selectedButtonId.replace('job_', ''));
+      jobIdFromMessage = selectedButtonId.replace('job_', '');
+    } else if (selectedButtonId.startsWith('accept_offer_')) {
+      // Handle client side
+    } else if (/^\d+$/.test(incomingText.trim())) {
+      jobIdFromMessage = incomingText.trim();
+    }
+
+    if (jobIdFromMessage) {
+      const shortId = parseInt(jobIdFromMessage);
       const job = await Job.findOne({ shortId });
       if (job) {
         const pro = await Professional.findOne({ phone, verified: true });
         if (pro) {
+          console.log(`Professional ${pro.name} starting flow for job #${shortId}`);
           let currentProState = proState || await ProfessionalState.create({ phone, step: 'idle' });
           await startProfessionalOfferFlow(senderId, job, currentProState);
           return NextResponse.json({ status: 'ok' });
@@ -68,7 +88,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Handle button for accepting offer
+    // Handle button for accepting offer (Client side)
     if (selectedButtonId.startsWith('accept_offer_')) {
       const offerId = selectedButtonId.replace('accept_offer_', '');
       const state = await ConversationState.findOne({ phone });
@@ -78,30 +98,21 @@ export async function POST(request: Request) {
       }
     }
 
-    // Fallback for manual text entry
-    if (/^\d+$/.test(incomingText.trim())) {
-      const shortId = parseInt(incomingText.trim());
-      const job = await Job.findOne({ shortId });
-      if (job) {
-        const pro = await Professional.findOne({ phone, verified: true });
-        if (pro) {
-          let currentProState = proState || await ProfessionalState.create({ phone, step: 'idle' });
-          await startProfessionalOfferFlow(senderId, job, currentProState);
-          return NextResponse.json({ status: 'ok' });
-        }
-      }
-    }
-
     if (proState && proState.step !== 'idle') {
       await handleProfessionalStep(proState, senderId, incomingText);
       return NextResponse.json({ status: 'ok' });
     }
 
-    // 2. Check if it's a registered pro but idle
+    // 2. Check if it's a registered pro but idle (and NOT a button/job response)
     const pro = await Professional.findOne({ phone, verified: true });
     if (pro && (!proState || proState.step === 'idle')) {
-      // If a pro sends something that isn't a number, just remind them
-      await sendMessage(senderId, "היי! כדי להגיש הצעה לעבודה, אנא השב עם מספר העבודה (למשל: 101).");
+      // If a pro sends "תיתן הצעת מחיר" as text (sometimes buttons fall back to text)
+      if (incomingText.includes('הצעת מחיר')) {
+        // We already tried to find the job ID above, if we are here, it failed.
+        await sendMessage(senderId, "לא הצלחתי לזהות את מספר העבודה. אנא השב עם המספר בלבד (למשל: 7).");
+      } else {
+        await sendMessage(senderId, "היי! כדי להגיש הצעה לעבודה, אנא השב עם מספר העבודה (למשל: 101).");
+      }
       return NextResponse.json({ status: 'ok' });
     }
 
