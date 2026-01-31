@@ -269,8 +269,11 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
       
       const offerMsg = `✨ *הצעה חדשה לעבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.price} ₪\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
       
+      // Ensure button text is under 25 chars
+      const buttonText = `בחר בהצעה של ${pro.name}`.substring(0, 25);
+      
       const buttons = [
-        { buttonId: `accept_offer_${offer._id}`, buttonText: 'אני בוחר בהצעה זו' }
+        { buttonId: `accept_offer_${offer._id}`, buttonText }
       ];
 
       try {
