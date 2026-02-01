@@ -70,8 +70,12 @@ export async function POST(request: Request) {
       jobIdFromMessage = selectedButtonId.replace('job_', '');
     } else if (selectedButtonId.startsWith('accept_offer_')) {
       // Handle client side
-    } else if (/^\d+$/.test(incomingText.trim())) {
-      jobIdFromMessage = incomingText.trim();
+    } else {
+      // Try to find a number in the text (like "7" or "תיתן הצעת מחיר (#7)")
+      const match = incomingText.match(/#(\d+)/) || incomingText.match(/^(\d+)$/);
+      if (match) {
+        jobIdFromMessage = match[1];
+      }
     }
 
     if (jobIdFromMessage) {
@@ -319,11 +323,12 @@ async function handleOfferSelectionById(state: any, senderId: string, offerId: s
 }
 
 async function handleOfferSelection(state: any, senderId: string, choice: string) {
-  // Choice is now expected to be the name of the professional
-  const proName = choice.trim();
+  // Clean the choice text if it comes from the button "בחר בהצעה של רועי רז"
+  let proName = choice.replace('בחר בהצעה של ', '').trim();
+  
   if (!proName || proName.length < 2) return;
   
-  // Find a professional with this name who has made an offer for this job
+  // Find a professional with this name
   const pro = await Professional.findOne({ name: new RegExp(`^${proName}$`, 'i') });
   
   if (pro) {
