@@ -138,12 +138,21 @@ export async function getStateInstance() {
 
 export async function setSettings(settings: any) {
   const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/setSettings/${GREEN_API_CONFIG.apiTokenInstance}`;
+  const body = {
+    ...settings,
+    incomingWebhook: 'yes',
+    stateWebhook: 'yes',
+    outgoingWebhook: 'no',
+    incomingMessageWebhook: 'yes',
+    incomingButtonsResponseMessageWebhook: 'yes',
+    incomingTemplateButtonsReplyMessageWebhook: 'yes'
+  };
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(settings),
+    body: JSON.stringify(body),
   });
   return response.json();
 }
