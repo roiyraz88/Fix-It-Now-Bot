@@ -25,6 +25,7 @@ export async function POST(request: Request) {
     
     console.log(`--- Incoming Webhook from ${phone} ---`);
     console.log('Message Type:', body.messageData?.typeMessage);
+    let incomingText = '';
     let selectedButtonId = '';
 
     // Improved button detection
