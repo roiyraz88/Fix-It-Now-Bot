@@ -66,7 +66,9 @@ export async function POST(request: Request) {
 
     // Identify job ID from button or text
     let jobIdFromMessage = '';
-    if (selectedButtonId.startsWith('job_')) {
+    if (selectedButtonId.startsWith('apply_job_')) {
+      jobIdFromMessage = selectedButtonId.replace('apply_job_', '');
+    } else if (selectedButtonId.startsWith('job_')) {
       jobIdFromMessage = selectedButtonId.replace('job_', '');
     } else if (selectedButtonId.startsWith('accept_offer_')) {
       // Handle client side

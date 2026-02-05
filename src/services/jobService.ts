@@ -14,20 +14,22 @@ export async function findAndNotifyProfessionals(jobId: string) {
   const professionals = await Professional.find({ verified: true });
   console.log(`Found ${professionals.length} verified professionals to notify.`);
 
-  let message = `🛠️ *עבודה חדשה זמינה! (#${job.shortId})* 🛠️\n\n`;
+  let message = `🛠️ *עבודה חדשה זמינה! (#${job.shortId})*\n\n`;
   message += `*סוג עבודה:* ${job.problemType === 'plumber' ? 'אינסטלציה' : job.problemType === 'electrician' ? 'חשמל' : 'מיזוג אוויר'}\n`;
   message += `*תיאור:* ${job.description}\n`;
-  if (job.detailedDescription) {
+  if (job.detailedDescription && job.detailedDescription !== job.description) {
     message += `*פירוט נוסף:* ${job.detailedDescription}\n`;
   }
   message += `*עיר:* ${job.city || 'לא צוין'}\n`;
   
   if (job.photoUrl) {
-    message += `*תמונה:* ${job.photoUrl}\n`;
+    message += `\n*תמונה:* ${job.photoUrl}\n`;
   }
 
+  message += `\n👇 לחץ על הכפתור למטה כדי להגיש הצעת מחיר`;
+
   const buttons = [
-    { buttonId: `job_${job.shortId}`, buttonText: 'תיתן הצעת מחיר' }
+    { buttonId: `apply_job_${job.shortId}`, buttonText: 'הגש הצעת מחיר' }
   ];
 
   for (const pro of professionals) {
