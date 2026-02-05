@@ -1,6 +1,6 @@
 export const GREEN_API_CONFIG = {
-  apiUrl: process.env.GREEN_API_URL || 'https://api.greenapi.com',
-  mediaUrl: process.env.GREEN_API_MEDIA_URL || 'https://api.greenapi.com',
+  apiUrl: process.env.GREEN_API_URL || 'https://7103.api.greenapi.com',
+  mediaUrl: process.env.GREEN_API_MEDIA_URL || 'https://7103.media.greenapi.com',
   idInstance: process.env.GREEN_API_ID_INSTANCE || '',
   apiTokenInstance: process.env.GREEN_API_TOKEN_INSTANCE || '',
 };
