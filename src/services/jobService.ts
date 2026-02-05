@@ -27,7 +27,7 @@ export async function findAndNotifyProfessionals(jobId: string) {
   }
 
   const buttons = [
-    { buttonId: `job_${job.shortId}`, buttonText: `תיתן הצעת מחיר (#${job.shortId})` }
+    { buttonId: `job_${job.shortId}`, buttonText: 'תיתן הצעת מחיר' }
   ];
 
   for (const pro of professionals) {

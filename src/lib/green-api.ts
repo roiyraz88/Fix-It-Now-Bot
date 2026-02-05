@@ -77,7 +77,7 @@ export async function sendMessage(
 }
 
 /**
- * Sends a message with interactive buttons using the standard sendButtons endpoint.
+ * Sends a message with template buttons (more stable and supported).
  */
 export async function sendButtons(
   chatId: string,
@@ -85,13 +85,21 @@ export async function sendButtons(
   buttons: Button[],
   footer?: string
 ): Promise<SendMessageResponse> {
-  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendButtons/${GREEN_API_CONFIG.apiTokenInstance}`;
+  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendTemplateButtons/${GREEN_API_CONFIG.apiTokenInstance}`;
   
+  const templateButtons = buttons.map((btn, index) => ({
+    index: index + 1,
+    quickReplyButton: {
+      displayText: btn.buttonText,
+      id: btn.buttonId
+    }
+  }));
+
   const body = {
     chatId: chatId.includes('@') ? chatId : `${chatId}@c.us`,
     message,
     footer: footer || '',
-    buttons,
+    templateButtons,
   };
 
   const response = await fetch(url, {
@@ -105,7 +113,7 @@ export async function sendButtons(
   const responseText = await response.text();
 
   if (!response.ok) {
-    console.error('Green API sendButtons Error:', responseText);
+    console.error('Green API sendTemplateButtons Error:', responseText);
     try {
       const errorData = JSON.parse(responseText);
       throw new Error(errorData.message || `Green API error: ${response.status}`);
