@@ -1,7 +1,7 @@
 import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import ProfessionalState from '@/models/ProfessionalState';
-import { sendMessage, sendButtons } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendListMessage } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 
 export async function findAndNotifyProfessionals(jobId: string) {
@@ -28,23 +28,33 @@ export async function findAndNotifyProfessionals(jobId: string) {
 
   message += `\n👇 לחץ על הכפתור למטה כדי להגיש הצעת מחיר`;
 
-  const buttons = [
-    { buttonId: `apply_job_${job.shortId}`, buttonText: 'הגש הצעת מחיר' }
+  const sections = [
+    {
+      title: 'פעולות זמינות',
+      rows: [
+        { 
+          rowId: `apply_job_${job.shortId}`, 
+          title: 'הגש הצעת מחיר', 
+          description: 'לחץ כאן כדי להתחיל בתהליך הצעת המחיר' 
+        }
+      ]
+    }
   ];
 
   for (const pro of professionals) {
     const cleanPhone = pro.phone.replace(/\D/g, '');
     try {
-      await sendButtons(
-        cleanPhone, 
-        message, 
-        buttons, 
-        'FixItNow - הצעת מחיר בלחיצת כפתור'
+      await sendListMessage(
+        cleanPhone,
+        message,
+        'צפה בעבודה / הגש הצעה',
+        sections,
+        'FixItNow - הצעות מחיר מיידיות'
       );
-      console.log(`Alert sent to ${pro.name} for job #${job.shortId} with button`);
+      console.log(`Alert sent to ${pro.name} for job #${job.shortId} via List`);
     } catch (err) {
       console.error(`Failed to notify ${pro.name}:`, (err as Error).message);
-      // Fallback to regular message if buttons fail
+      // Fallback to regular message if everything fails
       await sendMessage(cleanPhone, message + `\n*כדי להגיש הצעה לעבודה זו השב את המספר ${job.shortId}*`);
     }
   }

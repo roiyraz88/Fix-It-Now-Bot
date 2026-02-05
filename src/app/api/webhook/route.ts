@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     let incomingText = '';
     let selectedButtonId = '';
 
-    // Improved button detection
+    // Improved button/list detection
     const messageData = body.messageData;
     if (messageData?.typeMessage === 'buttonsResponseMessage') {
       selectedButtonId = messageData.buttonsResponseMessageData?.selectedButtonId || '';
@@ -36,6 +36,9 @@ export async function POST(request: Request) {
     } else if (messageData?.typeMessage === 'templateButtonsReplyMessage') {
       selectedButtonId = messageData.templateButtonsReplyMessageData?.selectedButtonId || '';
       incomingText = messageData.templateButtonsReplyMessageData?.selectedButtonText || '';
+    } else if (messageData?.typeMessage === 'listResponseMessage') {
+      selectedButtonId = messageData.listResponseMessageData?.rowId || '';
+      incomingText = messageData.listResponseMessageData?.title || '';
     } else {
       incomingText = messageData?.textMessageData?.textMessage || 
                      messageData?.extendedTextMessageData?.text || '';

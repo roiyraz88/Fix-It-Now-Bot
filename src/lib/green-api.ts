@@ -1,6 +1,6 @@
 export const GREEN_API_CONFIG = {
-  apiUrl: process.env.GREEN_API_URL || 'https://7103.api.greenapi.com',
-  mediaUrl: process.env.GREEN_API_MEDIA_URL || 'https://7103.media.greenapi.com',
+  apiUrl: process.env.GREEN_API_URL || 'https://api.greenapi.com',
+  mediaUrl: process.env.GREEN_API_MEDIA_URL || 'https://api.greenapi.com',
   idInstance: process.env.GREEN_API_ID_INSTANCE || '',
   apiTokenInstance: process.env.GREEN_API_TOKEN_INSTANCE || '',
 };
@@ -77,7 +77,43 @@ export async function sendMessage(
 }
 
 /**
- * Sends a message with template buttons (more stable and supported).
+ * Sends a list message (more stable and supported than buttons).
+ */
+export async function sendListMessage(
+  chatId: string,
+  message: string,
+  buttonText: string,
+  sections: { title: string; rows: { rowId: string; title: string; description?: string }[] }[],
+  footer?: string,
+  title?: string
+): Promise<SendMessageResponse> {
+  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendListMessage/${GREEN_API_CONFIG.apiTokenInstance}`;
+  
+  const body = {
+    chatId: chatId.includes('@') ? chatId : `${chatId}@c.us`,
+    message,
+    buttonText,
+    sections,
+    footer: footer || '',
+    title: title || ''
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    console.error('Green API sendListMessage Error:', responseText);
+    throw new Error(`Green API error: ${response.status}`);
+  }
+  return JSON.parse(responseText);
+}
+
+/**
+ * Sends a message with interactive buttons (Standard).
  */
 export async function sendButtons(
   chatId: string,
@@ -85,49 +121,27 @@ export async function sendButtons(
   buttons: Button[],
   footer?: string
 ): Promise<SendMessageResponse> {
-  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendTemplateButtons/${GREEN_API_CONFIG.apiTokenInstance}`;
+  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendButtons/${GREEN_API_CONFIG.apiTokenInstance}`;
   
-  const templateButtons = buttons.map((btn, index) => ({
-    index: index + 1,
-    quickReplyButton: {
-      displayText: btn.buttonText,
-      id: btn.buttonId
-    }
-  }));
-
   const body = {
     chatId: chatId.includes('@') ? chatId : `${chatId}@c.us`,
     message,
     footer: footer || '',
-    templateButtons,
+    buttons,
   };
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 
   const responseText = await response.text();
-
   if (!response.ok) {
-    console.error('Green API sendTemplateButtons Error:', responseText);
-    try {
-      const errorData = JSON.parse(responseText);
-      throw new Error(errorData.message || `Green API error: ${response.status}`);
-    } catch {
-      throw new Error(`Green API error: ${response.status} - ${responseText.substring(0, 100)}`);
-    }
+    console.error('Green API sendButtons Error:', responseText);
+    throw new Error(`Green API error: ${response.status}`);
   }
-
-  try {
-    return JSON.parse(responseText);
-  } catch (err) {
-    console.error('Failed to parse Green API response as JSON:', responseText);
-    throw new Error('Green API returned non-JSON response');
-  }
+  return JSON.parse(responseText);
 }
 
 export async function getSettings() {
