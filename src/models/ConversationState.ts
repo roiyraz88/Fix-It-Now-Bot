@@ -2,8 +2,9 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IConversationState extends Document {
   phone: string;
-  state: 'welcome' | 'waiting_for_details' | 'waiting_for_photo' | 'waiting_for_city' | 'searching_professionals' | 'waiting_for_offers' | 'offers_ready';
+  state: string;
   lastJobId?: mongoose.Types.ObjectId;
+  chatHistory: { role: 'user' | 'assistant', content: string }[];
   accumulatedData: {
     initialProblem?: string;
     detailedDescription?: string;
@@ -15,6 +16,7 @@ export interface IConversationState extends Document {
     priceEstimation?: {
       min: number;
       max: number;
+      explanation: string;
     };
   };
 }
@@ -23,10 +25,15 @@ const ConversationStateSchema: Schema = new Schema({
   phone: { type: String, required: true, unique: true },
   state: { 
     type: String, 
-    enum: ['welcome', 'waiting_for_details', 'collecting_info', 'waiting_for_photo', 'waiting_for_city', 'searching_professionals', 'waiting_for_offers', 'offers_ready'],
     default: 'welcome'
   },
   lastJobId: { type: Schema.Types.ObjectId, ref: 'Job' },
+  chatHistory: [
+    {
+      role: { type: String, enum: ['user', 'assistant'] },
+      content: { type: String }
+    }
+  ],
   accumulatedData: {
     initialProblem: { type: String },
     detailedDescription: { type: String },

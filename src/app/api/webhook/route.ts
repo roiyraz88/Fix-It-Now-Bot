@@ -7,7 +7,7 @@ import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import Offer from '@/models/Offer';
 import Counter from '@/models/Counter';
-import { analyzeClientMessage } from '@/services/openaiService';
+import { generateChatResponse, analyzeClientMessage } from '@/services/openaiService';
 import { findAndNotifyProfessionals, startProfessionalOfferFlow } from '@/services/jobService';
 
 const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nבמה אוכל לעזור לך היום? (למשל: יש לי נזילה בכיור)\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
@@ -142,59 +142,55 @@ export async function POST(request: Request) {
 }
 
 async function handleClientFlow(state: any, senderId: string, text: string, body: any) {
-  switch (state.state) {
-    case 'welcome':
-      state.accumulatedData.initialProblem = text;
-      state.state = 'waiting_for_details';
-      await sendMessage(senderId, "תוכל לפרט קצת יותר על התקלה? (למשל: מתי זה התחיל, מה המצב כרגע וכו')");
-      break;
+  // If we are in the middle of a job search, don't use AI for everything
+  if (state.state === 'waiting_for_offers') {
+    await handleOfferSelection(state, senderId, text);
+    return;
+  }
 
-    case 'waiting_for_details':
-      state.accumulatedData.detailedDescription = text;
-      const combinedText = `Problem: ${state.accumulatedData.initialProblem}\nDetails: ${state.accumulatedData.detailedDescription}`;
-      const analysis = await analyzeClientMessage(combinedText);
-      
-      if (!analysis.isValid) {
-        await sendMessage(senderId, `סליחה, התיאור עדיין לא מספיק ברור. 😕\n\n*הערה:* ${analysis.refusalReason || 'אנא פרט יותר.'}\n\nנסה לתאר שוב מה קרה.`);
-        return;
-      }
+  // Handle image specifically if we are waiting for a photo
+  if (state.state === 'waiting_for_photo') {
+    if (body.messageData?.typeMessage === 'imageMessage') {
+      state.accumulatedData.photoUrl = body.messageData.imageMessageData?.url;
+      await finalizeJobCreation(state, senderId);
+    } else if (text.includes('דילוג') || text.length < 5) {
+      await finalizeJobCreation(state, senderId);
+    } else {
+      await sendMessage(senderId, "לא זיהיתי תמונה. תוכל לשלוח תמונה או לכתוב 'דילוג' כדי להמשיך.");
+    }
+    await state.save();
+    return;
+  }
 
+  // Generic AI Flow for everything else (Welcome, Collecting Info, etc.)
+  try {
+    const chatResult = await generateChatResponse(text, state.chatHistory || []);
+    
+    // Save to history
+    state.chatHistory = state.chatHistory || [];
+    state.chatHistory.push({ role: 'user', content: text });
+    state.chatHistory.push({ role: 'assistant', content: chatResult.response });
+
+    if (chatResult.isReadyForJob && chatResult.extractedData) {
       state.accumulatedData = {
         ...state.accumulatedData,
-        description: analysis.description,
-        problemType: analysis.problemType,
-        urgency: analysis.urgency,
-        priceEstimation: analysis.priceEstimation,
-        city: analysis.city || undefined
+        ...chatResult.extractedData
       };
-      
       state.state = 'waiting_for_photo';
+      
+      // Send the AI response AND the request for photo
+      await sendMessage(senderId, chatResult.response);
       await sendMessage(senderId, "אשמח אם תוכל לצרף תמונה של התקלה כדי שאוכל להבין טוב יותר (או שלח 'דילוג').");
-      break;
-
-    case 'waiting_for_photo':
-      if (body.messageData?.typeMessage === 'imageMessage') {
-        state.accumulatedData.photoUrl = body.messageData.imageMessageData?.url;
-      }
-      if (state.accumulatedData.city) {
-        await finalizeJobCreation(state, senderId);
-      } else {
-        state.state = 'waiting_for_city';
-        await sendMessage(senderId, "באיזו עיר אתה נמצא?");
-      }
-      break;
-
-    case 'waiting_for_city':
-      state.accumulatedData.city = text;
-      await finalizeJobCreation(state, senderId);
-      break;
-
-    case 'waiting_for_offers':
-      // The client now sends the name of the professional to accept an offer
-      await handleOfferSelection(state, senderId, text);
-      break;
+    } else {
+      state.state = 'collecting_info';
+      await sendMessage(senderId, chatResult.response);
+    }
+    
+    await state.save();
+  } catch (error) {
+    console.error('AI Chat Error:', error);
+    await sendMessage(senderId, "סליחה, משהו השתבש. בוא ננסה שוב. מה התקלה שיש לך?");
   }
-  await state.save();
 }
 
 async function finalizeJobCreation(state: any, senderId: string) {
@@ -211,7 +207,7 @@ async function finalizeJobCreation(state: any, senderId: string) {
     shortId: counter.seq,
     clientPhone: state.phone,
     description: state.accumulatedData.description,
-    detailedDescription: state.accumulatedData.detailedDescription,
+    detailedDescription: state.accumulatedData.detailedDescription || state.accumulatedData.description,
     problemType: state.accumulatedData.problemType,
     city: state.accumulatedData.city,
     urgency: state.accumulatedData.urgency,
