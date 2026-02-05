@@ -77,21 +77,19 @@ export async function sendMessage(
 }
 
 /**
- * Sends a message with interactive buttons.
+ * Sends a message with interactive buttons using the standard sendButtons endpoint.
  */
 export async function sendButtons(
   chatId: string,
   message: string,
   buttons: Button[],
-  footer?: string,
-  header?: string
+  footer?: string
 ): Promise<SendMessageResponse> {
-  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendInteractiveButtonsReply/${GREEN_API_CONFIG.apiTokenInstance}`;
+  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendButtons/${GREEN_API_CONFIG.apiTokenInstance}`;
   
   const body = {
     chatId: chatId.includes('@') ? chatId : `${chatId}@c.us`,
-    header: header || '',
-    body: message,
+    message,
     footer: footer || '',
     buttons,
   };
@@ -107,7 +105,7 @@ export async function sendButtons(
   const responseText = await response.text();
 
   if (!response.ok) {
-    console.error('Green API sendInteractiveButtonsReply Error:', responseText);
+    console.error('Green API sendButtons Error:', responseText);
     try {
       const errorData = JSON.parse(responseText);
       throw new Error(errorData.message || `Green API error: ${response.status}`);

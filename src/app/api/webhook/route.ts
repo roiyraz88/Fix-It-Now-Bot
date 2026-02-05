@@ -23,7 +23,8 @@ export async function POST(request: Request) {
     const senderId = body.senderData?.sender;
     const phone = senderId.split('@')[0];
     
-    let incomingText = '';
+    console.log(`--- Incoming Webhook from ${phone} ---`);
+    console.log('Message Type:', body.messageData?.typeMessage);
     let selectedButtonId = '';
 
     // Improved button detection
@@ -39,10 +40,8 @@ export async function POST(request: Request) {
                      messageData?.extendedTextMessageData?.text || '';
     }
 
-    // Logging for debugging (will show in Vercel)
-    if (selectedButtonId) {
-      console.log(`Button Pressed: ID=${selectedButtonId}, Text=${incomingText}`);
-    }
+    console.log(`Identified Text: "${incomingText}"`);
+    console.log(`Selected Button ID: "${selectedButtonId}"`);
 
     await dbConnect();
 
@@ -285,8 +284,7 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
           `${job.clientPhone}@c.us`, 
           offerMsg, 
           buttons, 
-          'לחץ על הכפתור לאישור',
-          'FixItNow - הצעת מחיר'
+          'לחץ על הכפתור לאישור'
         );
       } catch (err) {
         console.error('Failed to send buttons to client:', (err as Error).message);

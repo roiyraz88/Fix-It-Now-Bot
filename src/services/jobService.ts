@@ -37,8 +37,7 @@ export async function findAndNotifyProfessionals(jobId: string) {
         cleanPhone, 
         message, 
         buttons, 
-        'FixItNow - הצעת מחיר בלחיצת כפתור',
-        '🛠️ עבודה חדשה זמינה!'
+        'FixItNow - הצעת מחיר בלחיצת כפתור'
       );
       console.log(`Alert sent to ${pro.name} for job #${job.shortId} with button`);
     } catch (err) {
