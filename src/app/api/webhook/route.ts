@@ -186,9 +186,8 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
       };
       state.state = 'waiting_for_photo';
       
-      // Send the AI response AND the request for photo
-      await sendMessage(senderId, chatResult.response);
-      await sendMessage(senderId, "אשמח אם תוכל לצרף תמונה של התקלה כדי שאוכל להבין טוב יותר (או שלח 'דילוג').");
+      // Only ask for photo - don't mention professionals yet
+      await sendMessage(senderId, "מעולה, קיבלתי! 📝\nיש לך תמונה של התקלה? זה יעזור לי להבין טוב יותר.\n(או שלח 'דילוג' אם אין)");
     } else {
       state.state = 'collecting_info';
       await sendMessage(senderId, chatResult.response);

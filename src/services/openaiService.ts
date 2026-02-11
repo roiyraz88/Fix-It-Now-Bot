@@ -26,11 +26,6 @@ export interface ChatResult {
     city: string | null;
     urgency: 'low' | 'medium' | 'high';
     description: string;
-    priceEstimation?: {
-      min: number;
-      max: number;
-      explanation: string;
-    };
   };
 }
 
@@ -65,35 +60,21 @@ export async function generateChatResponse(
     };
   }
 
-  // Limit history to last 6 messages for speed
-  const limitedHistory = history.slice(-6);
+  // Limit history to last 4 messages for speed
+  const limitedHistory = history.slice(-4);
 
-  const systemPrompt = `
-    אתה עוזר חכם של FixItNow, בוט AI שעוזר לאנשים למצוא בעלי מקצוע (אינסטלציה, חשמל, מיזוג).
-    המטרה שלך היא לנהל שיחה נעימה, אנושית ומבינה עם הלקוח, ולחלץ ממנו את המידע הדרוש כדי לפתוח קריאת שירות.
+  const systemPrompt = `אתה עוזר של FixItNow. המטרה: לחלץ מהלקוח מה הבעיה ובאיזו עיר הוא נמצא.
 
-    המידע שאתה צריך כדי להכריז שאתה "מוכן" (isReadyForJob: true):
-    1. מה הבעיה (סוג הבעיה ותיאור ברור).
-    2. עיר.
-    
-    הנחיות לשיחה:
-    - אם הלקוח אומר "היי" או "שלום", ענה בנחמדות ושאל איך אפשר לעזור היום. אל תהיה רובוטי.
-    - תן הרגשה שאתה מבין את התסכול שלו מהתקלה.
-    - אם יש מספיק מידע על התקלה, תן הערכת מחיר (טווח) והסבר קצר על מה יכולה להיות הבעיה.
-    - תמיד תהיה מנומס ותשתמש באמוג'ים מתאימים 🛠️⚡🚰.
-    - אם חסר מידע (כמו עיר), בקש אותו בצורה טבעית בתוך התשובה שלך.
-    - היה תמציתי - תשובות קצרות וממוקדות.
+כללים:
+- תשובות קצרות (2-3 משפטים מקסימום)
+- אל תזכיר שליחה לבעלי מקצוע או חיפוש - רק אסוף מידע
+- אם יש לך את סוג הבעיה + עיר, סיים בהודעה קצרה כמו "מעולה, קיבלתי את הפרטים!"
+- השתמש באמוג'י אחד או שניים מקסימום
 
-    פורמט תשובה (JSON בלבד):
-    - response: התשובה הטקסטואלית שלך ללקוח בשיחה.
-    - isReadyForJob: האם יש לך כבר את סוג הבעיה, התיאור והעיר? (true/false)
-    - extractedData: (רק אם isReadyForJob הוא true) אובייקט עם:
-        - problemType: "plumber", "electrician" או "ac"
-        - city: שם העיר בעברית
-        - urgency: "low", "medium" או "high"
-        - description: תיאור קצר ומקצועי של הבעיה
-        - priceEstimation: אובייקט עם min, max והסבר (כמו שמוצג ללקוח)
-  `;
+פורמט JSON:
+- response: התשובה לשלוח ללקוח
+- isReadyForJob: true אם יש לך סוג בעיה + תיאור + עיר
+- extractedData: (רק אם isReadyForJob=true) { problemType: "plumber"/"electrician"/"ac", city: string, urgency: "low"/"medium"/"high", description: string }`;
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -105,6 +86,8 @@ export async function generateChatResponse(
     model: 'gpt-4o-mini',
     messages: messages as any,
     response_format: { type: 'json_object' },
+    max_tokens: 300,
+    temperature: 0.7,
   });
 
   const content = response.choices[0].message.content;
