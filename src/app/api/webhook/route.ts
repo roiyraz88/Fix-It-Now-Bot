@@ -231,11 +231,11 @@ async function finalizeJobCreation(state: any, senderId: string) {
   const jobData = {
     shortId: counter.seq,
     clientPhone: state.phone,
-    description: state.accumulatedData.description,
-    detailedDescription: state.accumulatedData.detailedDescription || state.accumulatedData.description,
-    problemType: state.accumulatedData.problemType,
+    description: state.accumulatedData.description || state.accumulatedData.initialDescription,
+    detailedDescription: state.accumulatedData.detailedDescription || '',
+    problemType: state.accumulatedData.problemType || 'plumber',
     city: state.accumulatedData.city,
-    urgency: state.accumulatedData.urgency,
+    urgency: state.accumulatedData.urgency || 'medium',
     photoUrl: state.accumulatedData.photoUrl,
     status: 'searching_professionals'
   };
@@ -245,17 +245,9 @@ async function finalizeJobCreation(state: any, senderId: string) {
 
   state.state = 'waiting_for_offers';
   state.lastJobId = job._id;
+  await state.save();
 
-  let welcomeBack = `תודה! יצרתי עבורך קריאה. 📝\n\n`;
-  if (state.accumulatedData.priceEstimation) {
-    const { min, max, explanation } = state.accumulatedData.priceEstimation;
-    welcomeBack += `*✨ הערכת מחיר מומלצת על ידי AI:* \n`;
-    welcomeBack += `*₪${max} - ₪${min}*\n\n`;
-    welcomeBack += `${explanation}\n\n`;
-  }
-  welcomeBack += `אני מחפש כעת אנשי מקצוע פנויים ב-${state.accumulatedData.city}. אשלח לך הצעות מחיר בקרוב.`;
-  
-  await sendMessage(senderId, welcomeBack);
+  await sendMessage(senderId, `תודה! יצרתי קריאה מספר #${job.shortId} 📝\n\nאני מחפש כעת אנשי מקצוע פנויים ב-${state.accumulatedData.city}.\nאשלח לך הצעות מחיר בקרוב.`);
   await findAndNotifyProfessionals(job._id);
 }
 
