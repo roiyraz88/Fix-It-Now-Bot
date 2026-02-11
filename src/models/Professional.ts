@@ -9,6 +9,7 @@ export interface IProfessional extends Document {
   verified: boolean;
   description: string;
   aboutMe: string;
+  profilePhotoUrl?: string;
   documents: {
     selfieUrl?: string;
     idUrl?: string;
@@ -24,6 +25,8 @@ const ProfessionalSchema: Schema = new Schema({
   experienceYears: { type: Number, required: true },
   verified: { type: Boolean, default: false },
   description: { type: String },
+  aboutMe: { type: String },
+  profilePhotoUrl: { type: String },
   documents: {
     selfieUrl: { type: String },
     idUrl: { type: String },

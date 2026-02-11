@@ -156,6 +156,38 @@ export async function getStateInstance() {
   return response.json();
 }
 
+/**
+ * Sends an image by URL to a chat.
+ */
+export async function sendFileByUrl(
+  chatId: string,
+  urlFile: string,
+  caption?: string,
+  fileName?: string
+): Promise<SendMessageResponse> {
+  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendFileByUrl/${GREEN_API_CONFIG.apiTokenInstance}`;
+  
+  const body = {
+    chatId: chatId.includes('@') ? chatId : `${chatId}@c.us`,
+    urlFile,
+    fileName: fileName || 'image.jpg',
+    caption: caption || ''
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    console.error('Green API sendFileByUrl Error:', responseText);
+    throw new Error(`Green API error: ${response.status}`);
+  }
+  return JSON.parse(responseText);
+}
+
 export async function setSettings(settings: any) {
   const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/setSettings/${GREEN_API_CONFIG.apiTokenInstance}`;
   const body = {

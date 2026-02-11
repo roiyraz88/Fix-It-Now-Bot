@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendMessage, sendButtons } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendFileByUrl } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
@@ -276,6 +276,19 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
       }
       
       const offerMsg = `✨ *הצעה חדשה לעבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.price} ₪\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
+      
+      // Send profile photo if available
+      if (pro.profilePhotoUrl) {
+        try {
+          await sendFileByUrl(
+            `${job.clientPhone}@c.us`,
+            pro.profilePhotoUrl,
+            `📸 ${pro.name} - בעל מקצוע מאומת`
+          );
+        } catch (photoErr) {
+          console.error('Failed to send profile photo:', (photoErr as Error).message);
+        }
+      }
       
       // Ensure button text is under 25 chars
       const buttonText = `בחר בהצעה של ${pro.name}`.substring(0, 25);

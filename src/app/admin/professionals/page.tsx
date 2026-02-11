@@ -12,6 +12,7 @@ export default function ProfessionalsAdmin() {
     city: '',
     experienceYears: 1,
     aboutMe: '',
+    profilePhotoUrl: '',
     verified: true
   });
 
@@ -47,6 +48,7 @@ export default function ProfessionalsAdmin() {
           city: '',
           experienceYears: 1,
           aboutMe: '',
+          profilePhotoUrl: '',
           verified: true
         });
         fetchProfessionals();
@@ -140,6 +142,25 @@ export default function ProfessionalsAdmin() {
                   rows={3}
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium">תמונת פרופיל (URL)</label>
+                <input
+                  type="url"
+                  value={formData.profilePhotoUrl}
+                  onChange={(e) => setFormData({ ...formData, profilePhotoUrl: e.target.value })}
+                  placeholder="https://example.com/photo.jpg"
+                  className="mt-1 block w-full border border-gray-300 rounded-md p-2 bg-white"
+                />
+                <p className="text-xs text-gray-500 mt-1">תישלח ללקוח עם ההצעה</p>
+                {formData.profilePhotoUrl && (
+                  <img 
+                    src={formData.profilePhotoUrl} 
+                    alt="Preview" 
+                    className="mt-2 w-20 h-20 object-cover rounded-full border-2 border-green-500"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
+                )}
+              </div>
               <button
                 type="submit"
                 className="w-full py-2 px-4 bg-green-600 text-white rounded-md font-bold hover:bg-green-700"
@@ -155,6 +176,7 @@ export default function ProfessionalsAdmin() {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">תמונה</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">שם</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">מקצוע</th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">עיר</th>
@@ -164,11 +186,24 @@ export default function ProfessionalsAdmin() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
-                    <tr><td colSpan={5} className="px-6 py-4 text-center">טוען...</td></tr>
+                    <tr><td colSpan={6} className="px-6 py-4 text-center">טוען...</td></tr>
                   ) : professionals.length === 0 ? (
-                    <tr><td colSpan={5} className="px-6 py-4 text-center">אין בעלי מקצוע רשומים</td></tr>
+                    <tr><td colSpan={6} className="px-6 py-4 text-center">אין בעלי מקצוע רשומים</td></tr>
                   ) : professionals.map((pro) => (
                     <tr key={pro._id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {pro.profilePhotoUrl ? (
+                          <img 
+                            src={pro.profilePhotoUrl} 
+                            alt={pro.name} 
+                            className="w-10 h-10 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-sm">
+                            👤
+                          </div>
+                        )}
+                      </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{pro.name}</div>
                         <div className="text-sm text-gray-500">{pro.phone}</div>
