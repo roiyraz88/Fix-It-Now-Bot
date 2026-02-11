@@ -111,20 +111,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'ok' });
     }
 
-    // 2. Check if it's a registered pro but idle (and NOT a button/job response)
-    const pro = await Professional.findOne({ phone, verified: true });
-    if (pro && (!proState || proState.step === 'idle')) {
-      // If a pro sends "תיתן הצעת מחיר" as text (sometimes buttons fall back to text)
-      if (incomingText.includes('הצעת מחיר')) {
-        // We already tried to find the job ID above, if we are here, it failed.
-        await sendMessage(senderId, "לא הצלחתי לזהות את מספר העבודה. אנא השב עם המספר בלבד (למשל: 7).");
-      } else {
-        await sendMessage(senderId, "היי! כדי להגיש הצעה לעבודה, אנא השב עם מספר העבודה (למשל: 101).");
-      }
-      return NextResponse.json({ status: 'ok' });
-    }
-
-    // 3. Otherwise, handle as a client
+    // 2. Handle as a client (professionals can also be clients!)
     let state = await ConversationState.findOne({ phone });
     if (!state) {
       state = await ConversationState.create({ 
@@ -134,6 +121,20 @@ export async function POST(request: Request) {
       });
       await sendMessage(senderId, WELCOME_MESSAGE);
       return NextResponse.json({ status: 'ok' });
+    }
+
+    // Only treat as idle pro if there's NO active client conversation
+    // and they explicitly send a job number
+    const pro = await Professional.findOne({ phone, verified: true });
+    if (pro && state.state === 'welcome' && incomingText.match(/^#?\d+$/)) {
+      // Pro trying to respond to a job with just a number
+      const jobNum = parseInt(incomingText.replace('#', ''));
+      const job = await Job.findOne({ shortId: jobNum });
+      if (job) {
+        let currentProState = proState || await ProfessionalState.create({ phone, step: 'idle' });
+        await startProfessionalOfferFlow(senderId, job, currentProState);
+        return NextResponse.json({ status: 'ok' });
+      }
     }
 
     await handleClientFlow(state, senderId, incomingText, body);
