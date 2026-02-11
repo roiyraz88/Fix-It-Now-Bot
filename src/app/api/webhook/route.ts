@@ -171,10 +171,13 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
   try {
     const chatResult = await generateChatResponse(text, state.chatHistory || []);
     
-    // Save to history
+    // Save to history (limit to last 10 messages to keep DB small and AI fast)
     state.chatHistory = state.chatHistory || [];
     state.chatHistory.push({ role: 'user', content: text });
     state.chatHistory.push({ role: 'assistant', content: chatResult.response });
+    if (state.chatHistory.length > 10) {
+      state.chatHistory = state.chatHistory.slice(-10);
+    }
 
     if (chatResult.isReadyForJob && chatResult.extractedData) {
       state.accumulatedData = {

@@ -38,6 +38,36 @@ export async function generateChatResponse(
   message: string, 
   history: { role: 'user' | 'assistant', content: string }[] = []
 ): Promise<ChatResult> {
+  // Quick responses for simple messages (no AI needed - instant response)
+  const lowerMsg = message.toLowerCase().trim();
+  
+  // Greetings
+  if (['היי', 'שלום', 'הי', 'בוקר טוב', 'ערב טוב', 'hello', 'hi'].includes(lowerMsg)) {
+    return {
+      response: "היי! 👋 שמח שפנית אלינו. איך אוכל לעזור לך היום? יש לך תקלה בבית?",
+      isReadyForJob: false
+    };
+  }
+  
+  // Thanks
+  if (['תודה', 'תודה רבה', 'thanks', 'thank you', 'מעולה', 'אחלה'].includes(lowerMsg)) {
+    return {
+      response: "בשמחה! 😊 אם יש עוד משהו שאוכל לעזור, אני כאן.",
+      isReadyForJob: false
+    };
+  }
+  
+  // Yes/OK
+  if (['כן', 'אוקיי', 'ok', 'yes', 'בסדר', 'יאללה'].includes(lowerMsg)) {
+    return {
+      response: "מעולה! אז ספר לי - מה התקלה ובאיזו עיר אתה נמצא? 🏠",
+      isReadyForJob: false
+    };
+  }
+
+  // Limit history to last 6 messages for speed
+  const limitedHistory = history.slice(-6);
+
   const systemPrompt = `
     אתה עוזר חכם של FixItNow, בוט AI שעוזר לאנשים למצוא בעלי מקצוע (אינסטלציה, חשמל, מיזוג).
     המטרה שלך היא לנהל שיחה נעימה, אנושית ומבינה עם הלקוח, ולחלץ ממנו את המידע הדרוש כדי לפתוח קריאת שירות.
@@ -52,6 +82,7 @@ export async function generateChatResponse(
     - אם יש מספיק מידע על התקלה, תן הערכת מחיר (טווח) והסבר קצר על מה יכולה להיות הבעיה.
     - תמיד תהיה מנומס ותשתמש באמוג'ים מתאימים 🛠️⚡🚰.
     - אם חסר מידע (כמו עיר), בקש אותו בצורה טבעית בתוך התשובה שלך.
+    - היה תמציתי - תשובות קצרות וממוקדות.
 
     פורמט תשובה (JSON בלבד):
     - response: התשובה הטקסטואלית שלך ללקוח בשיחה.
@@ -66,7 +97,7 @@ export async function generateChatResponse(
 
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...history,
+    ...limitedHistory,
     { role: 'user', content: message }
   ];
 
