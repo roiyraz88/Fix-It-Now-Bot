@@ -7,7 +7,6 @@ import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import Offer from '@/models/Offer';
 import Counter from '@/models/Counter';
-import { generateChatResponse, analyzeClientMessage } from '@/services/openaiService';
 import { findAndNotifyProfessionals, startProfessionalOfferFlow } from '@/services/jobService';
 
 const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nבמה אוכל לעזור לך היום? (למשל: יש לי נזילה בכיור)\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
@@ -147,56 +146,108 @@ export async function POST(request: Request) {
 }
 
 async function handleClientFlow(state: any, senderId: string, text: string, body: any) {
-  // If we are in the middle of a job search, don't use AI for everything
+  // If we are in the middle of a job search (waiting for offers)
   if (state.state === 'waiting_for_offers') {
     await handleOfferSelection(state, senderId, text);
     return;
   }
 
-  // Handle image specifically if we are waiting for a photo
-  if (state.state === 'waiting_for_photo') {
-    if (body.messageData?.typeMessage === 'imageMessage') {
-      state.accumulatedData.photoUrl = body.messageData.imageMessageData?.url;
-      await finalizeJobCreation(state, senderId);
-    } else if (text.includes('דילוג') || text.length < 5) {
-      await finalizeJobCreation(state, senderId);
+  // STEP-BY-STEP STRUCTURED FLOW (no AI per step - faster & more predictable)
+  
+  // Step 1: welcome -> waiting_for_problem (ask what the issue is)
+  if (state.state === 'welcome') {
+    // Detect problem type from first message
+    const problemType = detectProblemType(text);
+    if (problemType) {
+      state.accumulatedData = { ...state.accumulatedData, problemType, initialDescription: text };
+      state.state = 'waiting_for_details';
+      await state.save();
+      await sendMessage(senderId, `הבנתי, בעיה ב${getProblemName(problemType)}. 🔧\nספר לי עוד קצת פרטים - מה בדיוק קורה? (ככל שתפרט יותר, כך נוכל לעזור טוב יותר)`);
     } else {
-      await sendMessage(senderId, "לא זיהיתי תמונה. תוכל לשלוח תמונה או לכתוב 'דילוג' כדי להמשיך.");
+      // Can't detect, ask more clearly
+      await sendMessage(senderId, "לא הצלחתי להבין את סוג הבעיה. 🤔\nהאם מדובר בבעיית *אינסטלציה* (נזילה, סתימה), *חשמל* או *מיזוג אוויר*?");
     }
-    await state.save();
     return;
   }
 
-  // Generic AI Flow for everything else (Welcome, Collecting Info, etc.)
-  try {
-    const chatResult = await generateChatResponse(text, state.chatHistory || []);
-    
-    // Save to history (limit to last 10 messages to keep DB small and AI fast)
-    state.chatHistory = state.chatHistory || [];
-    state.chatHistory.push({ role: 'user', content: text });
-    state.chatHistory.push({ role: 'assistant', content: chatResult.response });
-    if (state.chatHistory.length > 10) {
-      state.chatHistory = state.chatHistory.slice(-10);
-    }
-
-    if (chatResult.isReadyForJob && chatResult.extractedData) {
-      state.accumulatedData = {
-        ...state.accumulatedData,
-        ...chatResult.extractedData
-      };
-      state.state = 'waiting_for_photo';
-      
-      // Only ask for photo - don't mention professionals yet
-      await sendMessage(senderId, "מעולה, קיבלתי! 📝\nיש לך תמונה של התקלה? זה יעזור לי להבין טוב יותר.\n(או שלח 'דילוג' אם אין)");
-    } else {
-      state.state = 'collecting_info';
-      await sendMessage(senderId, chatResult.response);
-    }
-    
+  // Step 2: waiting_for_details -> waiting_for_photo
+  if (state.state === 'waiting_for_details') {
+    state.accumulatedData.detailedDescription = text;
+    state.accumulatedData.description = `${state.accumulatedData.initialDescription || ''} - ${text}`;
+    state.state = 'waiting_for_photo';
     await state.save();
-  } catch (error) {
-    console.error('AI Chat Error:', error);
-    await sendMessage(senderId, "סליחה, משהו השתבש. בוא ננסה שוב. מה התקלה שיש לך?");
+    await sendMessage(senderId, "תודה על הפרטים! 📝\nיש לך תמונה של התקלה? זה יעזור לבעלי המקצוע להבין טוב יותר.\n(שלח תמונה או כתוב 'דילוג')");
+    return;
+  }
+
+  // Step 3: waiting_for_photo -> waiting_for_city
+  if (state.state === 'waiting_for_photo') {
+    if (body.messageData?.typeMessage === 'imageMessage') {
+      state.accumulatedData.photoUrl = body.messageData.imageMessageData?.url;
+      await sendMessage(senderId, "קיבלתי את התמונה! 📸");
+    } else if (!text.includes('דילוג') && text.length > 10) {
+      // User might be adding more details instead of photo
+      state.accumulatedData.detailedDescription += ` ${text}`;
+      await sendMessage(senderId, "הבנתי, הוספתי לפרטים. 👍\nעכשיו - יש לך תמונה? (או כתוב 'דילוג')");
+      await state.save();
+      return;
+    }
+    // Move to city step
+    state.state = 'waiting_for_city';
+    await state.save();
+    await sendMessage(senderId, "באיזו עיר אתה נמצא? 🏙️");
+    return;
+  }
+
+  // Step 4: waiting_for_city -> finalize
+  if (state.state === 'waiting_for_city') {
+    const city = text.trim();
+    if (city.length < 2) {
+      await sendMessage(senderId, "אנא ציין שם עיר תקין.");
+      return;
+    }
+    state.accumulatedData.city = city;
+    state.accumulatedData.urgency = 'medium'; // default urgency
+    await state.save();
+    await finalizeJobCreation(state, senderId);
+    return;
+  }
+
+  // Fallback: If state is unknown, reset to welcome
+  state.state = 'welcome';
+  await state.save();
+  await sendMessage(senderId, "משהו השתבש. בוא נתחיל מחדש - מה הבעיה שאתה צריך עזרה בה?");
+}
+
+// Helper to detect problem type from text
+function detectProblemType(text: string): 'plumber' | 'electrician' | 'ac' | null {
+  const lower = text.toLowerCase();
+  
+  // Plumber keywords
+  if (/(נזילה|סתימה|צינור|אינסטלציה|אינסטלטור|ברז|כיור|אמבטיה|שירותים|ביוב|דוד|מים)/i.test(text)) {
+    return 'plumber';
+  }
+  
+  // Electrician keywords
+  if (/(חשמל|חשמלאי|קצר|שקע|תקע|נתיך|לוח חשמל|תאורה|מנורה|הארקה)/i.test(text)) {
+    return 'electrician';
+  }
+  
+  // AC keywords
+  if (/(מיזוג|מזגן|קירור|חימום|טכנאי מיזוג)/i.test(text)) {
+    return 'ac';
+  }
+  
+  return null;
+}
+
+// Helper to get Hebrew name for problem type
+function getProblemName(type: string): string {
+  switch (type) {
+    case 'plumber': return 'אינסטלציה';
+    case 'electrician': return 'חשמל';
+    case 'ac': return 'מיזוג אוויר';
+    default: return 'בית';
   }
 }
 
