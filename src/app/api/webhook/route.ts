@@ -147,158 +147,75 @@ export async function POST(request: Request) {
 }
 
 async function handleClientFlow(state: any, senderId: string, text: string, body: any) {
-  // If we are in the middle of a job search (waiting for offers)
+  console.log(`handleClientFlow - State: ${state.state}, Text: "${text}"`);
+  
+  // If waiting for offers
   if (state.state === 'waiting_for_offers') {
     await handleOfferSelection(state, senderId, text);
     return;
   }
 
-  const lowerText = text.trim().toLowerCase();
+  // RIGID STEP-BY-STEP FLOW
   
-  // Handle greetings and casual messages naturally
-  if (isGreeting(lowerText)) {
-    await sendMessage(senderId, "היי! 👋 שמח שפנית אלינו.\nמה קרה? ספר לי על הבעיה ואני אעזור לך למצוא בעל מקצוע.");
-    // Keep state as welcome so next message will be processed
-    if (state.state !== 'welcome') {
-      state.state = 'welcome';
-      await state.save();
-    }
-    return;
-  }
-  
-  // Handle thanks
-  if (isThanks(lowerText)) {
-    await sendMessage(senderId, "בשמחה! 😊 אם יש עוד משהו, אני כאן.");
-    return;
-  }
-
-  // STEP-BY-STEP STRUCTURED FLOW
-  
-  // Step 1: welcome -> waiting_for_details
+  // Step 1: welcome - collect problem description
   if (state.state === 'welcome') {
-    const problemType = detectProblemType(text);
-    if (problemType) {
-      state.accumulatedData = { ...state.accumulatedData, problemType, initialDescription: text };
-      state.state = 'waiting_for_details';
-      await state.save();
-      await sendMessage(senderId, `הבנתי, ${getEmpathyMessage(problemType)} 🔧\nספר לי עוד קצת - מה בדיוק קורה? (ככל שתפרט יותר, כך בעלי המקצוע יוכלו לעזור טוב יותר)`);
-    } else {
-      // Can't detect - ask naturally
-      await sendMessage(senderId, "אוקיי, אני כאן לעזור! 🏠\nספר לי קצת יותר - מה הבעיה? (למשל: נזילה, בעיית חשמל, מזגן לא עובד...)");
-    }
+    // Any text is accepted as the problem description
+    const problemType = detectProblemType(text) || 'plumber'; // default to plumber if can't detect
+    state.accumulatedData = { problemType, initialDescription: text };
+    state.state = 'waiting_for_details';
+    await state.save();
+    await sendMessage(senderId, "קיבלתי. ספר לי עוד פרטים על הבעיה:");
     return;
   }
 
-  // Step 2: waiting_for_details -> waiting_for_photo
+  // Step 2: waiting_for_details - collect more details
   if (state.state === 'waiting_for_details') {
-    // Check if this message contains a problem type we missed before
-    const problemType = detectProblemType(text);
-    if (problemType && !state.accumulatedData.problemType) {
-      state.accumulatedData.problemType = problemType;
-    }
-    
     state.accumulatedData.detailedDescription = text;
-    state.accumulatedData.description = `${state.accumulatedData.initialDescription || ''} - ${text}`;
+    state.accumulatedData.description = `${state.accumulatedData.initialDescription} - ${text}`;
     state.state = 'waiting_for_photo';
     await state.save();
-    await sendMessage(senderId, "תודה על הפרטים! 📝\nיש לך אולי תמונה של הבעיה? זה עוזר לבעלי המקצוע להבין מה צריך.\n(שלח תמונה או כתוב 'אין' / 'דילוג')");
+    await sendMessage(senderId, "יש לך תמונה של הבעיה? (שלח תמונה או כתוב 'לא')");
     return;
   }
 
-  // Step 3: waiting_for_photo -> waiting_for_city
+  // Step 3: waiting_for_photo - collect photo or skip
   if (state.state === 'waiting_for_photo') {
     if (body.messageData?.typeMessage === 'imageMessage') {
       state.accumulatedData.photoUrl = body.messageData.imageMessageData?.url;
-      await sendMessage(senderId, "מעולה, קיבלתי! 📸");
-    } else if (isSkip(lowerText)) {
-      // User skipped photo - that's fine
-    } else if (text.length > 15) {
-      // User might be adding more details
-      state.accumulatedData.detailedDescription += ` ${text}`;
-      await sendMessage(senderId, "הוספתי לפרטים 👍\nיש תמונה? (או 'דילוג')");
-      await state.save();
-      return;
     }
     state.state = 'waiting_for_city';
     await state.save();
-    await sendMessage(senderId, "באיזו עיר אתה נמצא? 🏙️");
+    await sendMessage(senderId, "באיזו עיר אתה נמצא?");
     return;
   }
 
-  // Step 4: waiting_for_city -> finalize
+  // Step 4: waiting_for_city - collect city and finalize
   if (state.state === 'waiting_for_city') {
-    const city = text.trim();
-    if (city.length < 2) {
-      await sendMessage(senderId, "לא הבנתי, באיזו עיר?");
-      return;
-    }
-    state.accumulatedData.city = city;
+    state.accumulatedData.city = text.trim();
     state.accumulatedData.urgency = 'medium';
     await state.save();
     await finalizeJobCreation(state, senderId);
     return;
   }
 
-  // Fallback
+  // Fallback - reset
   state.state = 'welcome';
   await state.save();
-  await sendMessage(senderId, "בוא נתחיל מחדש - מה הבעיה שאתה צריך עזרה בה? 🛠️");
-}
-
-// Helper functions for natural language understanding
-function isGreeting(text: string): boolean {
-  const greetings = ['היי', 'הי', 'שלום', 'בוקר טוב', 'ערב טוב', 'צהריים טובים', 'מה נשמע', 'מה קורה', 'hello', 'hi', 'hey'];
-  return greetings.some(g => text === g || text.startsWith(g + ' ') || text.startsWith(g + ','));
-}
-
-function isThanks(text: string): boolean {
-  const thanks = ['תודה', 'תודה רבה', 'thanks', 'thank you', 'מעולה', 'אחלה', 'סבבה'];
-  return thanks.some(t => text.includes(t));
-}
-
-function isSkip(text: string): boolean {
-  const skips = ['דילוג', 'אין', 'לא', 'אין לי', 'בלי', 'skip', 'no'];
-  return skips.some(s => text === s || text.startsWith(s + ' '));
+  await sendMessage(senderId, "מה הבעיה שלך?");
 }
 
 // Helper to detect problem type from text
 function detectProblemType(text: string): 'plumber' | 'electrician' | 'ac' | null {
-  // Plumber keywords
   if (/(נזילה|נוזל|סתימה|סתום|צינור|אינסטלציה|אינסטלטור|ברז|כיור|אמבטיה|שירותים|ביוב|דוד|מים|אסלה|ניקוז)/i.test(text)) {
     return 'plumber';
   }
-  
-  // Electrician keywords
   if (/(חשמל|חשמלאי|קצר|שקע|תקע|נתיך|לוח חשמל|תאורה|מנורה|הארקה|נפל חשמל|קפץ)/i.test(text)) {
     return 'electrician';
   }
-  
-  // AC keywords
   if (/(מיזוג|מזגן|קירור|חימום|טכנאי מיזוג|לא מקרר|לא מחמם|מטפטף)/i.test(text)) {
     return 'ac';
   }
-  
   return null;
-}
-
-// Helper to get Hebrew name for problem type
-function getProblemName(type: string): string {
-  switch (type) {
-    case 'plumber': return 'אינסטלציה';
-    case 'electrician': return 'חשמל';
-    case 'ac': return 'מיזוג אוויר';
-    default: return 'בית';
-  }
-}
-
-// Helper to get empathy message based on problem type
-function getEmpathyMessage(type: string): string {
-  switch (type) {
-    case 'plumber': return 'בעיות מים זה תמיד מעצבן 💧';
-    case 'electrician': return 'בעיות חשמל זה לא נעים ⚡';
-    case 'ac': return 'בלי מיזוג זה קשה 🌡️';
-    default: return 'אני כאן לעזור';
-  }
 }
 
 async function finalizeJobCreation(state: any, senderId: string) {
