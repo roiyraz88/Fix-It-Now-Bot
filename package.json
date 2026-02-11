@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "cloudinary": "^2.9.0",
     "mongoose": "^9.1.5",
     "next": "16.1.6",
     "openai": "^6.17.0",
