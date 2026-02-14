@@ -2,6 +2,18 @@
 
 import { useState, useEffect, useRef } from 'react';
 
+const getProfessionName = (profession: string): string => {
+  const names: Record<string, string> = {
+    plumber: 'אינסטלטור',
+    electrician: 'חשמלאי',
+    ac: 'טכנאי מיזוג',
+    painter: 'צבעי',
+    handyman: 'הנדימן',
+    contractor: 'קבלן שיפוצים'
+  };
+  return names[profession] || profession;
+};
+
 export default function ProfessionalsAdmin() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,13 +50,11 @@ export default function ProfessionalsAdmin() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       alert('נא להעלות קובץ תמונה בלבד');
       return;
     }
 
-    // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       alert('גודל הקובץ המקסימלי הוא 5MB');
       return;
@@ -123,7 +133,6 @@ export default function ProfessionalsAdmin() {
         <h1 className="text-3xl font-bold mb-8 text-green-700">ניהול בעלי מקצוע - FixItNow</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Form */}
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 h-fit">
             <h2 className="text-xl font-bold mb-4">הוספת בעל מקצוע חדש</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -157,6 +166,9 @@ export default function ProfessionalsAdmin() {
                   <option value="plumber">אינסטלטור</option>
                   <option value="electrician">חשמלאי</option>
                   <option value="ac">טכנאי מיזוג</option>
+                  <option value="painter">צבעי</option>
+                  <option value="handyman">הנדימן</option>
+                  <option value="contractor">קבלן שיפוצים</option>
                 </select>
               </div>
               <div>
@@ -291,7 +303,7 @@ export default function ProfessionalsAdmin() {
                         <div className="text-sm text-gray-500">{pro.phone}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {pro.profession === 'plumber' ? 'אינסטלטור' : pro.profession === 'electrician' ? 'חשמלאי' : 'מיזוג'}
+                        {getProfessionName(pro.profession)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{pro.city}</td>
                       <td className="px-6 py-4 whitespace-nowrap">

@@ -96,6 +96,54 @@ export async function generateChatResponse(
   return JSON.parse(content) as ChatResult;
 }
 
+export interface PriceEstimation {
+  min: number;
+  max: number;
+  explanation: string;
+}
+
+export async function getPriceEstimation(
+  problemType: string,
+  description: string,
+  detailedDescription: string
+): Promise<PriceEstimation> {
+  const prompt = `אתה מומחה לתיקוני בית בישראל. תן הערכת מחיר לעבודה הבאה.
+
+סוג הבעיה: ${problemType === 'plumber' ? 'אינסטלציה' : problemType === 'electrician' ? 'חשמל' : 'מיזוג אוויר'}
+תיאור ראשוני: ${description}
+פירוט נוסף: ${detailedDescription}
+
+החזר JSON עם:
+- min: מחיר מינימלי בש"ח (מספר בלבד)
+- max: מחיר מקסימלי בש"ח (מספר בלבד)
+- explanation: הסבר קצר בעברית (2-3 משפטים) על מה משפיע על המחיר ומה יכולה להיות הבעיה
+
+דוגמה לתשובה:
+{"min": 150, "max": 400, "explanation": "נזילה בכיור יכולה לנבוע מאטם פגום או צינור סדוק. המחיר תלוי בגישה לצנרת ובחלקים שצריך להחליף."}`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      max_tokens: 200,
+    });
+
+    const content = response.choices[0].message.content;
+    if (!content) throw new Error('Empty response');
+    
+    return JSON.parse(content) as PriceEstimation;
+  } catch (error) {
+    console.error('Price estimation error:', error);
+    // Default estimation if AI fails
+    return {
+      min: 150,
+      max: 500,
+      explanation: 'הערכה כללית. המחיר הסופי ייקבע על ידי בעל המקצוע לאחר בדיקה.'
+    };
+  }
+}
+
 export async function analyzeClientMessage(text: string): Promise<AnalysisResult> {
 // ... existing code ...
   const prompt = `

@@ -8,6 +8,7 @@ import Professional from '@/models/Professional';
 import Offer from '@/models/Offer';
 import Counter from '@/models/Counter';
 import { findAndNotifyProfessionals, startProfessionalOfferFlow } from '@/services/jobService';
+import { getPriceEstimation } from '@/services/openaiService';
 
 const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nבמה אוכל לעזור לך היום? (למשל: יש לי נזילה בכיור)\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
@@ -205,7 +206,7 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
 }
 
 // Helper to detect problem type from text
-function detectProblemType(text: string): 'plumber' | 'electrician' | 'ac' | null {
+function detectProblemType(text: string): string | null {
   if (/(נזילה|נוזל|סתימה|סתום|צינור|אינסטלציה|אינסטלטור|ברז|כיור|אמבטיה|שירותים|ביוב|דוד|מים|אסלה|ניקוז)/i.test(text)) {
     return 'plumber';
   }
@@ -214,6 +215,15 @@ function detectProblemType(text: string): 'plumber' | 'electrician' | 'ac' | nul
   }
   if (/(מיזוג|מזגן|קירור|חימום|טכנאי מיזוג|לא מקרר|לא מחמם|מטפטף)/i.test(text)) {
     return 'ac';
+  }
+  if (/(צבע|צביעה|צבעי|קיר|קירות|לצבוע)/i.test(text)) {
+    return 'painter';
+  }
+  if (/(שיפוץ|שיפוצים|קבלן|בנייה|ריצוף|גבס|טיח)/i.test(text)) {
+    return 'contractor';
+  }
+  if (/(הנדימן|תיקון|תיקונים|לתקן|שבור|נשבר)/i.test(text)) {
+    return 'handyman';
   }
   return null;
 }
@@ -227,6 +237,13 @@ async function finalizeJobCreation(state: any, senderId: string) {
   );
 
   console.log('Generated shortId:', counter.seq);
+
+  // Get AI price estimation
+  const priceEstimation = await getPriceEstimation(
+    state.accumulatedData.problemType || 'plumber',
+    state.accumulatedData.initialDescription || '',
+    state.accumulatedData.detailedDescription || ''
+  );
 
   const jobData = {
     shortId: counter.seq,
@@ -247,7 +264,13 @@ async function finalizeJobCreation(state: any, senderId: string) {
   state.lastJobId = job._id;
   await state.save();
 
-  await sendMessage(senderId, `תודה! יצרתי קריאה מספר #${job.shortId} 📝\n\nאני מחפש כעת אנשי מקצוע פנויים ב-${state.accumulatedData.city}.\nאשלח לך הצעות מחיר בקרוב.`);
+  let message = `תודה! יצרתי קריאה מספר #${job.shortId} 📝\n\n`;
+  message += `*✨ הערכת מחיר על ידי AI:*\n`;
+  message += `*₪${priceEstimation.min} - ₪${priceEstimation.max}*\n\n`;
+  message += `${priceEstimation.explanation}\n\n`;
+  message += `אני מחפש כעת אנשי מקצוע פנויים ב-${state.accumulatedData.city}. אשלח לך הצעות מחיר בקרוב.`;
+
+  await sendMessage(senderId, message);
   await findAndNotifyProfessionals(job._id);
 }
 
