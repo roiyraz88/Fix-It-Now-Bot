@@ -171,7 +171,7 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
   // Step 1: welcome - collect problem description
   if (state.state === 'welcome') {
     // Any text is accepted as the problem description
-    const problemType = detectProblemType(text) || 'plumber'; // default to plumber if can't detect
+    const problemType = detectProblemType(text); // Will default to handyman if can't detect
     state.accumulatedData = { problemType, initialDescription: text };
     state.state = 'waiting_for_details';
     await state.save();
@@ -218,6 +218,10 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
 
 // Helper to detect problem type from text
 function detectProblemType(text: string): string | null {
+  // Handyman - check first because it's more general
+  if (/(הרכבה|להרכיב|רהיט|רהיטים|איקאה|ikea|שולחן|ארון|מדף|מדפים|תיקון|תיקונים|לתקן|שבור|נשבר|הנדימן|תליה|לתלות|קיר גבס)/i.test(text)) {
+    return 'handyman';
+  }
   if (/(נזילה|נוזל|סתימה|סתום|צינור|אינסטלציה|אינסטלטור|ברז|כיור|אמבטיה|שירותים|ביוב|דוד|מים|אסלה|ניקוז)/i.test(text)) {
     return 'plumber';
   }
@@ -233,10 +237,7 @@ function detectProblemType(text: string): string | null {
   if (/(שיפוץ|שיפוצים|קבלן|בנייה|ריצוף|גבס|טיח)/i.test(text)) {
     return 'contractor';
   }
-  if (/(הנדימן|תיקון|תיקונים|לתקן|שבור|נשבר)/i.test(text)) {
-    return 'handyman';
-  }
-  return null;
+  return 'handyman'; // Default to handyman for general requests
 }
 
 async function finalizeJobCreation(state: any, senderId: string) {
@@ -289,12 +290,33 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
   const pro = await Professional.findOne({ phone: proState.phone });
 
   if (proState.step === 'awaiting_price') {
-    const price = parseInt(text.replace(/\D/g, ''));
-    if (isNaN(price)) {
-      await sendMessage(senderId, "אנא שלח מחיר במספרים בלבד (למשל: 250).");
+    // Check if there are numbers in the text
+    const numbers = text.match(/\d+/g);
+    
+    if (!numbers || numbers.length === 0) {
+      await sendMessage(senderId, "אנא שלח מחיר במספרים (למשל: 250 או 500-600).");
       return;
     }
-    proState.accumulatedOffer.price = price;
+    
+    let priceText: string;
+    let priceValue: number;
+    
+    if (numbers.length >= 2) {
+      // Two numbers - format as range "500-600"
+      priceText = `${numbers[0]}-${numbers[1]}`;
+      priceValue = parseInt(numbers[0]); // Store the minimum for reference
+    } else if (text.length > 10 && /[א-ת]/.test(text)) {
+      // Has Hebrew text (explanation) - keep original
+      priceText = text;
+      priceValue = parseInt(numbers[0]);
+    } else {
+      // Single number
+      priceText = numbers[0];
+      priceValue = parseInt(numbers[0]);
+    }
+    
+    proState.accumulatedOffer.price = priceValue;
+    proState.accumulatedOffer.priceText = priceText;
     proState.step = 'awaiting_eta';
     await proState.save();
     await sendMessage(senderId, "תוך כמה זמן תוכל להגיע ללקוח? (למשל: חצי שעה, שעתיים)");
@@ -318,7 +340,7 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
         proProfile += `\n*קצת עלי:* ${pro.aboutMe}`;
       }
       
-      const offerMsg = `✨ *הצעה חדשה לעבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.price} ₪\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
+      const offerMsg = `✨ *הצעה חדשה לעבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.priceText || proState.accumulatedOffer.price} ₪\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
       
       // Send profile photo if available
       if (pro.profilePhotoUrl) {
