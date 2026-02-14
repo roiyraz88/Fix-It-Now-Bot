@@ -156,6 +156,16 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
     return;
   }
 
+  // If job was completed - ask if they need something else
+  if (state.state === 'completed') {
+    // Reset to welcome for a new request
+    state.state = 'welcome';
+    state.accumulatedData = {};
+    await state.save();
+    await sendMessage(senderId, "היי! שמח לשמוע ממך שוב 😊\nאיך אפשר לעזור לך הפעם?");
+    return;
+  }
+
   // RIGID STEP-BY-STEP FLOW
   
   // Step 1: welcome - collect problem description
@@ -358,7 +368,7 @@ async function handleOfferSelectionById(state: any, senderId: string, offerId: s
   const pro = await Professional.findOne({ phone: offer.professionalPhone });
   if (!pro) return;
 
-  await sendMessage(senderId, `מעולה! ההצעה של ${pro.name} אושרה. ✅\nהנה המספר שלו: ${pro.phone}.\nהוא יצור איתך קשר בהקדם.`);
+  await sendMessage(senderId, `מעולה! ההצעה של ${pro.name} אושרה. ✅\nהנה המספר שלו: ${pro.phone}.\nהוא יצור איתך קשר בהקדם.\n\n*אם תצטרך עזרה נוספת בעתיד, פשוט שלח הודעה!*`);
   
   const job = await Job.findById(state.lastJobId);
   if (job) {
@@ -366,6 +376,11 @@ async function handleOfferSelectionById(state: any, senderId: string, offerId: s
     job.assignedProfessionalPhone = pro.phone;
     await job.save();
   }
+  
+  // Mark conversation as completed
+  state.state = 'completed';
+  state.completedJobId = state.lastJobId;
+  await state.save();
   
   await sendMessage(`${pro.phone}@c.us`, `הלקוח אישר את הצעתך! 🎉\nהנה המספר שלו: ${state.phone}. צור איתו קשר לתיאום סופי.`);
 }
