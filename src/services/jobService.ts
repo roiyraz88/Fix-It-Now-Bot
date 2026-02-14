@@ -1,8 +1,20 @@
 import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import ProfessionalState from '@/models/ProfessionalState';
-import { sendMessage, sendButtons, sendListMessage } from '@/lib/green-api';
+import { sendMessage, sendListMessage } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
+
+const getProfessionName = (type: string): string => {
+  const names: Record<string, string> = {
+    plumber: 'אינסטלציה',
+    electrician: 'חשמל',
+    ac: 'מיזוג אוויר',
+    painter: 'צביעה',
+    handyman: 'הנדימן',
+    contractor: 'שיפוצים'
+  };
+  return names[type] || type;
+};
 
 export async function findAndNotifyProfessionals(jobId: string) {
   await dbConnect();
@@ -15,47 +27,26 @@ export async function findAndNotifyProfessionals(jobId: string) {
   console.log(`Found ${professionals.length} verified professionals to notify.`);
 
   let message = `🛠️ *עבודה חדשה זמינה! (#${job.shortId})*\n\n`;
-  message += `*סוג עבודה:* ${job.problemType === 'plumber' ? 'אינסטלציה' : job.problemType === 'electrician' ? 'חשמל' : 'מיזוג אוויר'}\n`;
-  message += `*תיאור:* ${job.description}\n`;
-  if (job.detailedDescription && job.detailedDescription !== job.description) {
-    message += `*פירוט נוסף:* ${job.detailedDescription}\n`;
-  }
+  message += `*סוג עבודה:* ${getProfessionName(job.problemType)}\n`;
+  
+  // Use detailedDescription as main description, or description if detailed is empty
+  const mainDescription = job.detailedDescription || job.description || 'לא צוין';
+  message += `*תיאור:* ${mainDescription}\n`;
   message += `*עיר:* ${job.city || 'לא צוין'}\n`;
   
   if (job.photoUrl) {
-    message += `\n*תמונה:* ${job.photoUrl}\n`;
+    message += `\n📷 *תמונה מצורפת*\n`;
   }
 
-  message += `\n👇 לחץ על הכפתור למטה כדי להגיש הצעת מחיר`;
-
-  const sections = [
-    {
-      title: 'פעולות זמינות',
-      rows: [
-        { 
-          rowId: `apply_job_${job.shortId}`, 
-          title: 'הגש הצעת מחיר', 
-          description: 'לחץ כאן כדי להתחיל בתהליך הצעת המחיר' 
-        }
-      ]
-    }
-  ];
+  message += `\n*להגשת הצעה - השב עם המספר ${job.shortId}*`;
 
   for (const pro of professionals) {
     const cleanPhone = pro.phone.replace(/\D/g, '');
     try {
-      await sendListMessage(
-        cleanPhone,
-        message,
-        'צפה בעבודה / הגש הצעה',
-        sections,
-        'FixItNow - הצעות מחיר מיידיות'
-      );
-      console.log(`Alert sent to ${pro.name} for job #${job.shortId} via List`);
+      await sendMessage(cleanPhone, message);
+      console.log(`Alert sent to ${pro.name} for job #${job.shortId}`);
     } catch (err) {
       console.error(`Failed to notify ${pro.name}:`, (err as Error).message);
-      // Fallback to regular message if everything fails
-      await sendMessage(cleanPhone, message + `\n*כדי להגיש הצעה לעבודה זו השב את המספר ${job.shortId}*`);
     }
   }
 }

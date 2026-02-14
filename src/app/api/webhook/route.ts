@@ -182,7 +182,8 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
   // Step 2: waiting_for_details - collect more details
   if (state.state === 'waiting_for_details') {
     state.accumulatedData.detailedDescription = text;
-    state.accumulatedData.description = `${state.accumulatedData.initialDescription} - ${text}`;
+    // Don't include initialDescription in description to avoid undefined
+    state.accumulatedData.description = text;
     state.state = 'waiting_for_photo';
     await state.save();
     await sendMessage(senderId, "יש לך תמונה של הבעיה? (שלח תמונה או כתוב 'לא')");
