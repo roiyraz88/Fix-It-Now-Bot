@@ -102,14 +102,29 @@ export interface PriceEstimation {
   explanation: string;
 }
 
+// Maps internal problemType to Hebrew category for AI prompt - MUST match detectProblemType in webhook
+function getProblemTypeHebrew(problemType: string): string {
+  const map: Record<string, string> = {
+    plumber: 'אינסטלציה',
+    electrician: 'חשמל',
+    ac: 'מיזוג אוויר',
+    painter: 'צביעה',
+    handyman: 'הנדימן',
+    contractor: 'שיפוץ/קבלן',
+  };
+  return map[problemType] || 'תיקון בית כללי';
+}
+
 export async function getPriceEstimation(
   problemType: string,
   description: string,
   detailedDescription: string
 ): Promise<PriceEstimation> {
+  const problemTypeHebrew = getProblemTypeHebrew(problemType);
+
   const prompt = `אתה מומחה לתיקוני בית בישראל. תן הערכת מחיר לעבודה הבאה.
 
-סוג הבעיה: ${problemType === 'plumber' ? 'אינסטלציה' : problemType === 'electrician' ? 'חשמל' : 'מיזוג אוויר'}
+סוג הבעיה: ${problemTypeHebrew}
 תיאור ראשוני: ${description}
 פירוט נוסף: ${detailedDescription}
 
