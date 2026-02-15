@@ -14,6 +14,15 @@ const getProfessionName = (profession: string): string => {
   return names[profession] || profession;
 };
 
+// Format phone: 97252... → 052...
+const formatPhone = (phone: string): string => {
+  if (!phone) return phone;
+  if (phone.startsWith('972')) {
+    return '0' + phone.slice(3);
+  }
+  return phone;
+};
+
 export default function ProfessionalsAdmin() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -300,7 +309,7 @@ export default function ProfessionalsAdmin() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">{pro.name}</div>
-                        <div className="text-sm text-gray-500">{pro.phone}</div>
+                        <div className="text-sm text-gray-500">{formatPhone(pro.phone)}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {getProfessionName(pro.profession)}

@@ -10,6 +10,16 @@ import Counter from '@/models/Counter';
 import { findAndNotifyProfessionals, startProfessionalOfferFlow } from '@/services/jobService';
 import { getPriceEstimation } from '@/services/openaiService';
 
+// Format phone number: 97252... → 052...
+function formatPhone(phone: string): string {
+  if (!phone) return phone;
+  // Remove 972 prefix and add 0
+  if (phone.startsWith('972')) {
+    return '0' + phone.slice(3);
+  }
+  return phone;
+}
+
 const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nבמה אוכל לעזור לך היום? (למשל: יש לי נזילה בכיור)\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
 export async function POST(request: Request) {
@@ -166,12 +176,18 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
     return;
   }
 
-  // RIGID STEP-BY-STEP FLOW
+  // RIGID STEP-BY-STEP FLOW WITH CONTEXT AWARENESS
+  
+  // Check for completely irrelevant messages (questions, random text)
+  const isIrrelevant = /^(מה השעה|מי אתה|מה אתה|למה|איך|מתי|היי|שלום|הי|בוקר טוב|ערב טוב)\??$/i.test(text.trim());
   
   // Step 1: welcome - collect problem description
   if (state.state === 'welcome') {
-    // Any text is accepted as the problem description
-    const problemType = detectProblemType(text); // Will default to handyman if can't detect
+    if (isIrrelevant || text.length < 3) {
+      await sendMessage(senderId, "היי! 👋 אני כאן לעזור לך למצוא בעל מקצוע.\nספר לי מה הבעיה שלך? (למשל: יש לי נזילה בכיור)");
+      return;
+    }
+    const problemType = detectProblemType(text);
     state.accumulatedData = { problemType, initialDescription: text };
     state.state = 'waiting_for_details';
     await state.save();
@@ -181,8 +197,11 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
 
   // Step 2: waiting_for_details - collect more details
   if (state.state === 'waiting_for_details') {
+    if (isIrrelevant || text.length < 5) {
+      await sendMessage(senderId, "אני צריך עוד קצת פרטים על הבעיה כדי למצוא לך בעל מקצוע מתאים.\nמה בדיוק קורה?");
+      return;
+    }
     state.accumulatedData.detailedDescription = text;
-    // Don't include initialDescription in description to avoid undefined
     state.accumulatedData.description = text;
     state.state = 'waiting_for_photo';
     await state.save();
@@ -192,7 +211,18 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
 
   // Step 3: waiting_for_photo - collect photo or skip
   if (state.state === 'waiting_for_photo') {
-    if (body.messageData?.typeMessage === 'imageMessage') {
+    const isSkip = /^(לא|אין|דילוג|skip|no)$/i.test(text.trim());
+    const isImage = body.messageData?.typeMessage === 'imageMessage';
+    
+    if (!isSkip && !isImage && text.length > 20) {
+      // Might be more details, add them and ask again
+      state.accumulatedData.detailedDescription += ' ' + text;
+      await state.save();
+      await sendMessage(senderId, "הוספתי את הפרטים. יש לך גם תמונה? (או כתוב 'לא')");
+      return;
+    }
+    
+    if (isImage) {
       state.accumulatedData.photoUrl = body.messageData.imageMessageData?.url;
     }
     state.state = 'waiting_for_city';
@@ -203,7 +233,13 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
 
   // Step 4: waiting_for_city - collect city and finalize
   if (state.state === 'waiting_for_city') {
-    state.accumulatedData.city = text.trim();
+    // Check if it looks like a city name (short, Hebrew, no numbers)
+    const cityText = text.trim();
+    if (cityText.length < 2 || cityText.length > 30 || /\d/.test(cityText)) {
+      await sendMessage(senderId, "לא הבנתי - באיזו עיר אתה נמצא? (למשל: תל אביב, חיפה, באר שבע)");
+      return;
+    }
+    state.accumulatedData.city = cityText;
     state.accumulatedData.urgency = 'medium';
     await state.save();
     await finalizeJobCreation(state, senderId);
@@ -391,7 +427,7 @@ async function handleOfferSelectionById(state: any, senderId: string, offerId: s
   const pro = await Professional.findOne({ phone: offer.professionalPhone });
   if (!pro) return;
 
-  await sendMessage(senderId, `מעולה! ההצעה של ${pro.name} אושרה. ✅\nהנה המספר שלו: ${pro.phone}.\nהוא יצור איתך קשר בהקדם.\n\n*אם תצטרך עזרה נוספת בעתיד, פשוט שלח הודעה!*`);
+  await sendMessage(senderId, `מעולה! ההצעה של ${pro.name} אושרה. ✅\nהנה המספר שלו: ${formatPhone(pro.phone)}.\nהוא יצור איתך קשר בהקדם.\n\n*אם תצטרך עזרה נוספת בעתיד, פשוט שלח הודעה!*`);
   
   const job = await Job.findById(state.lastJobId);
   if (job) {
@@ -405,7 +441,7 @@ async function handleOfferSelectionById(state: any, senderId: string, offerId: s
   state.completedJobId = state.lastJobId;
   await state.save();
   
-  await sendMessage(`${pro.phone}@c.us`, `הלקוח אישר את הצעתך! 🎉\nהנה המספר שלו: ${state.phone}. צור איתו קשר לתיאום סופי.`);
+  await sendMessage(`${pro.phone}@c.us`, `הלקוח אישר את הצעתך! 🎉\nהנה המספר שלו: ${formatPhone(state.phone)}. צור איתו קשר לתיאום סופי.`);
 }
 
 async function handleOfferSelection(state: any, senderId: string, choice: string) {
