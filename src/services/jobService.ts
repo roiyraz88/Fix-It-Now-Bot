@@ -28,10 +28,10 @@ export async function findAndNotifyProfessionals(jobId: string) {
 
   let message = `🛠️ *עבודה חדשה זמינה! (#${job.shortId})*\n\n`;
   message += `*סוג עבודה:* ${getProfessionName(job.problemType)}\n`;
-  
-  // Use detailedDescription as main description, or description if detailed is empty
-  const mainDescription = job.detailedDescription || job.description || 'לא צוין';
-  message += `*תיאור:* ${mainDescription}\n`;
+  message += `*תיאור העבודה:* ${job.description || 'לא צוין'}\n`;
+  if (job.detailedDescription) {
+    message += `*פירוט:* ${job.detailedDescription}\n`;
+  }
   message += `*עיר:* ${job.city || 'לא צוין'}\n`;
   
   if (job.photoUrl) {

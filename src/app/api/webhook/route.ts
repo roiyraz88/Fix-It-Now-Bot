@@ -125,6 +125,12 @@ export async function POST(request: Request) {
     // 2. Handle as a client (professionals can also be clients!)
     let state = await ConversationState.findOne({ phone });
     if (!state) {
+      // Verified professionals: don't treat WhatsApp Business auto-greetings as new client
+      const pro = await Professional.findOne({ phone, verified: true });
+      if (pro) {
+        await sendMessage(senderId, "היי! את/ה רשום/ה כבעל מקצוע במערכת. להגשת הצעה לעבודה, שלח את מספר העבודה (למשל: 31).");
+        return NextResponse.json({ status: 'ok' });
+      }
       state = await ConversationState.create({ 
         phone, 
         state: 'welcome', 
@@ -195,14 +201,13 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
     return;
   }
 
-  // Step 2: waiting_for_details - collect more details
+  // Step 2: waiting_for_details - collect more details (initialDescription stays from welcome)
   if (state.state === 'waiting_for_details') {
     if (isIrrelevant || text.length < 5) {
       await sendMessage(senderId, "אני צריך עוד קצת פרטים על הבעיה כדי למצוא לך בעל מקצוע מתאים.\nמה בדיוק קורה?");
       return;
     }
     state.accumulatedData.detailedDescription = text;
-    state.accumulatedData.description = text;
     state.state = 'waiting_for_photo';
     await state.save();
     await sendMessage(senderId, "יש לך תמונה של הבעיה? (שלח תמונה או כתוב 'לא')");
@@ -296,7 +301,7 @@ async function finalizeJobCreation(state: any, senderId: string) {
   const jobData = {
     shortId: counter.seq,
     clientPhone: state.phone,
-    description: state.accumulatedData.description || state.accumulatedData.initialDescription,
+    description: state.accumulatedData.initialDescription || '',
     detailedDescription: state.accumulatedData.detailedDescription || '',
     problemType: state.accumulatedData.problemType || 'plumber',
     city: state.accumulatedData.city,
@@ -326,7 +331,7 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
   const pro = await Professional.findOne({ phone: proState.phone });
 
   if (proState.step === 'awaiting_price') {
-    // Check if there are numbers in the text
+    // Check if there are numbers in the text (minimal validation)
     const numbers = text.match(/\d+/g);
     
     if (!numbers || numbers.length === 0) {
@@ -334,22 +339,9 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
       return;
     }
     
-    let priceText: string;
-    let priceValue: number;
-    
-    if (numbers.length >= 2) {
-      // Two numbers - format as range "500-600"
-      priceText = `${numbers[0]}-${numbers[1]}`;
-      priceValue = parseInt(numbers[0]); // Store the minimum for reference
-    } else if (text.length > 10 && /[א-ת]/.test(text)) {
-      // Has Hebrew text (explanation) - keep original
-      priceText = text;
-      priceValue = parseInt(numbers[0]);
-    } else {
-      // Single number
-      priceText = numbers[0];
-      priceValue = parseInt(numbers[0]);
-    }
+    // Always keep the FULL text the professional wrote - pass it as-is to the client
+    const priceText = text.trim();
+    const priceValue = parseInt(numbers[0]); // For Offer model / sorting
     
     proState.accumulatedOffer.price = priceValue;
     proState.accumulatedOffer.priceText = priceText;
@@ -376,7 +368,7 @@ async function handleProfessionalStep(proState: any, senderId: string, text: str
         proProfile += `\n*קצת עלי:* ${pro.aboutMe}`;
       }
       
-      const offerMsg = `✨ *הצעה חדשה לעבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.priceText || proState.accumulatedOffer.price} ₪\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
+      const offerMsg = `✨ *הצעה חדשה לעבודה שלך!* ✨\n\n${proProfile}\n\n*מחיר:* ${proState.accumulatedOffer.priceText || proState.accumulatedOffer.price}\n*זמן הגעה:* ${proState.accumulatedOffer.eta}`;
       
       // Send profile photo if available
       if (pro.profilePhotoUrl) {
