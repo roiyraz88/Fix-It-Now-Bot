@@ -7,6 +7,7 @@ export interface IConversationState extends Document {
   chatHistory: { role: 'user' | 'assistant', content: string }[];
   accumulatedData: {
     initialProblem?: string;
+    initialDescription?: string;
     detailedDescription?: string;
     description?: string;
     problemType?: string;
@@ -36,6 +37,7 @@ const ConversationStateSchema: Schema = new Schema({
   ],
   accumulatedData: {
     initialProblem: { type: String },
+    initialDescription: { type: String },
     detailedDescription: { type: String },
     description: { type: String },
     problemType: { type: String },

@@ -434,6 +434,25 @@ async function handleOfferSelectionById(state: any, senderId: string, offerId: s
   await state.save();
   
   await sendMessage(`${pro.phone}@c.us`, `הלקוח אישר את הצעתך! 🎉\nהנה המספר שלו: ${formatPhone(state.phone)}. צור איתו קשר לתיאום סופי.`);
+
+  // Notify all other professionals who offered on this job that it's been closed
+  if (job) {
+    const otherOffers = await Offer.find({
+      jobId: job._id,
+      professionalPhone: { $ne: pro.phone }
+    });
+
+    const notifiedPhones = new Set<string>();
+    for (const otherOffer of otherOffers) {
+      if (!notifiedPhones.has(otherOffer.professionalPhone)) {
+        notifiedPhones.add(otherOffer.professionalPhone);
+        await sendMessage(
+          `${otherOffer.professionalPhone}@c.us`,
+          `עבודה מספר #${job.shortId} נסגרה ונלקחה על ידי בעל מקצוע אחר.\nתודה על ההצעה! 🙏`
+        );
+      }
+    }
+  }
 }
 
 async function handleOfferSelection(state: any, senderId: string, choice: string) {
