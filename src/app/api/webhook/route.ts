@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
@@ -167,7 +167,12 @@ export async function POST(request: Request) {
       if (selectedButtonId === 'role_professional' || incomingText.includes('בעל מקצוע')) {
         state.state = 'welcome';
         await state.save();
-        await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע ומעוניין להירשם למערכת, פנה למנהל.\nבנתיים, אפשר להשתמש בבוט כלקוח - ספר לי מה הבעיה שלך.");
+        await sendContact(senderId, {
+          phoneContact: 972527345641,
+          firstName: 'סער',
+          lastName: 'ניב',
+        });
+        await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע ומעוניין להירשם למערכת, צור קשר עם סער ניב.\nבנתיים, אפשר להשתמש בבוט כלקוח - ספר לי מה הבעיה שלך.");
         return NextResponse.json({ status: 'ok' });
       }
       // User sent something else - resend the role selection

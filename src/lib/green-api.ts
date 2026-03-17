@@ -184,6 +184,50 @@ export async function sendButtons(
   return JSON.parse(responseText);
 }
 
+export interface SendContactParams {
+  phoneContact: number;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
+  company?: string;
+}
+
+/**
+ * Sends a contact (vCard) message to a chat.
+ * phoneContact: intl format 11-16 digits, no +
+ */
+export async function sendContact(
+  chatId: string,
+  contact: SendContactParams,
+  options?: { quotedMessageId?: string; typingTime?: number }
+): Promise<SendMessageResponse> {
+  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendContact/${GREEN_API_CONFIG.apiTokenInstance}`;
+  const body: Record<string, unknown> = {
+    chatId: chatId.includes('@') ? chatId : `${chatId}@c.us`,
+    contact: {
+      phoneContact: contact.phoneContact,
+      ...(contact.firstName && { firstName: contact.firstName }),
+      ...(contact.middleName && { middleName: contact.middleName }),
+      ...(contact.lastName && { lastName: contact.lastName }),
+      ...(contact.company && { company: contact.company }),
+    },
+  };
+  if (options?.quotedMessageId) body.quotedMessageId = options.quotedMessageId;
+  if (options?.typingTime) body.typingTime = options.typingTime;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const responseText = await response.text();
+  if (!response.ok) {
+    console.error('Green API sendContact Error:', responseText);
+    throw new Error(`Green API error: ${response.status}`);
+  }
+  return JSON.parse(responseText);
+}
+
 export async function getSettings() {
   const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/getSettings/${GREEN_API_CONFIG.apiTokenInstance}`;
   const response = await fetch(url);
