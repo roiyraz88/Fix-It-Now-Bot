@@ -124,13 +124,15 @@ export async function getPriceEstimation(
 
   const prompt = `אתה מומחה לתיקוני בית בישראל. תן הערכת מחיר לעבודה הבאה.
 
+חשוב: בסיס ההערכה חייב להיות מקרים אמיתיים ומחירי שוק ידועים מישראל (מאתרי שירותים, פורומים, דוגמאות מהאינטרנט). אל תמציא מספרים - השתמש בידע על מחירים ריאליים.
+
 סוג הבעיה: ${problemTypeHebrew}
 תיאור ראשוני: ${description}
 פירוט נוסף: ${detailedDescription}
 
 החזר JSON עם:
-- min: מחיר מינימלי בש"ח (מספר בלבד)
-- max: מחיר מקסימלי בש"ח (מספר בלבד)
+- min: מחיר מינימלי בש"ח (מספר בלבד) - מבוסס מקרים אמיתיים
+- max: מחיר מקסימלי בש"ח (מספר בלבד) - מבוסס מקרים אמיתיים
 - explanation: הסבר קצר בעברית (2-3 משפטים) על מה משפיע על המחיר ומה יכולה להיות הבעיה
 
 דוגמה לתשובה:
@@ -147,7 +149,12 @@ export async function getPriceEstimation(
     const content = response.choices[0].message.content;
     if (!content) throw new Error('Empty response');
     
-    return JSON.parse(content) as PriceEstimation;
+    const estimation = JSON.parse(content) as PriceEstimation;
+    // העלאת המחירים ב-20%
+    const MARKUP = 1.2;
+    estimation.min = Math.round(estimation.min * MARKUP);
+    estimation.max = Math.round(estimation.max * MARKUP);
+    return estimation;
   } catch (error) {
     console.error('Price estimation error:', error);
     // Default estimation if AI fails

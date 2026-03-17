@@ -236,7 +236,7 @@ export async function POST(request: Request) {
         state.accumulatedData = { problemType: prof.problemType, initialDescription: prof.desc };
         state.state = 'waiting_for_details';
         await state.save();
-        await sendMessage(senderId, "קיבלתי. ספר לי עוד פרטים על הבעיה:");
+        await sendMessage(senderId, "אנא תאר במפורט מהי מטרת הפנייה:");
         return NextResponse.json({ status: 'ok' });
       }
       await sendProfessionSelection(senderId);
@@ -300,46 +300,24 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
     state.accumulatedData = { problemType, initialDescription: text };
     state.state = 'waiting_for_details';
     await state.save();
-    await sendMessage(senderId, "קיבלתי. ספר לי עוד פרטים על הבעיה:");
+        await sendMessage(senderId, "אנא תאר במפורט מהי מטרת הפנייה:");
     return;
   }
 
   // Step 2: waiting_for_details - collect more details (initialDescription stays from welcome)
   if (state.state === 'waiting_for_details') {
     if (isIrrelevant || text.length < 5) {
-      await sendMessage(senderId, "אני צריך עוד קצת פרטים על הבעיה כדי למצוא לך בעל מקצוע מתאים.\nמה בדיוק קורה?");
+      await sendMessage(senderId, "אנא תאר במפורט מהי מטרת הפנייה:");
       return;
     }
     state.accumulatedData.detailedDescription = text;
-    state.state = 'waiting_for_photo';
-    await state.save();
-    await sendMessage(senderId, "יש לך תמונה של הבעיה? (שלח תמונה או כתוב 'לא')");
-    return;
-  }
-
-  // Step 3: waiting_for_photo - collect photo or skip
-  if (state.state === 'waiting_for_photo') {
-    const isSkip = /^(לא|אין|דילוג|skip|no)$/i.test(text.trim());
-    const isImage = body.messageData?.typeMessage === 'imageMessage';
-    
-    if (!isSkip && !isImage && text.length > 20) {
-      // Might be more details, add them and ask again
-      state.accumulatedData.detailedDescription += ' ' + text;
-      await state.save();
-      await sendMessage(senderId, "הוספתי את הפרטים. יש לך גם תמונה? (או כתוב 'לא')");
-      return;
-    }
-    
-    if (isImage) {
-      state.accumulatedData.photoUrl = body.messageData.imageMessageData?.url;
-    }
     state.state = 'waiting_for_city';
     await state.save();
     await sendMessage(senderId, "באיזו עיר אתה נמצא?");
     return;
   }
 
-  // Step 4: waiting_for_city - collect city and finalize
+  // Step 3: waiting_for_city - collect city and finalize
   if (state.state === 'waiting_for_city') {
     // Check if it looks like a city name (short, Hebrew, no numbers)
     const cityText = text.trim();
