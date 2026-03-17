@@ -64,11 +64,26 @@ export async function POST(request: Request) {
       const t = messageData.templateButtonsReplyMessageData || messageData.templateButtonReplyMessage;
       selectedButtonId = t?.selectedButtonId || t?.selectedId || '';
       incomingText = t?.selectedButtonText || t?.selectedDisplayText || '';
-    } else if (messageData?.typeMessage === 'interactiveButtonsReply') {
-      const ir = messageData.interactiveButtonsReply || messageData.interactiveButtonsReplyData;
-      const btn = Array.isArray(ir?.buttons) ? ir.buttons.find((b: { buttonId?: string }) => b?.buttonId) : null;
-      selectedButtonId = btn?.buttonId || ir?.selectedId || '';
-      incomingText = btn?.buttonText || ir?.selectedDisplayText || '';
+    } else if (messageData?.typeMessage === 'interactiveButtonsReply' || messageData?.typeMessage === 'interactiveButtonReply') {
+      const ir = messageData.interactiveButtonsReply || messageData.interactiveButtonsReplyData || messageData.interactiveButtonReply || {};
+      selectedButtonId = ir?.selectedId || ir?.selectedButtonId || (messageData as any)?.selectedId || '';
+      incomingText = ir?.selectedDisplayText || ir?.selectedButtonText || ir?.selectedButtonText || '';
+      if (!selectedButtonId && Array.isArray(ir?.buttons)) {
+        const idx = (ir as any).selectedIndex;
+        const sel = typeof idx === 'number' ? ir.buttons[idx] : ir.buttons.find((b: any) => b.selected) || ir.buttons[0];
+        if (sel) {
+          selectedButtonId = sel.buttonId || selectedButtonId;
+          incomingText = sel.buttonText || incomingText;
+        }
+      }
+    }
+    // Fallback: deep search for selectedId (Green API format varies)
+    if (!selectedButtonId && messageData) {
+      const anyData = messageData as Record<string, unknown>;
+      const sel = anyData?.selectedId || (anyData?.templateButtonReplyMessage as any)?.selectedId || (anyData?.templateButtonsReplyMessageData as any)?.selectedId;
+      if (sel) selectedButtonId = String(sel);
+      const txt = anyData?.selectedDisplayText || (anyData?.templateButtonReplyMessage as any)?.selectedDisplayText || (anyData?.templateButtonsReplyMessageData as any)?.selectedDisplayText;
+      if (txt) incomingText = String(txt);
     } else if (messageData?.typeMessage === 'listResponseMessage') {
       selectedButtonId = messageData.listResponseMessageData?.rowId || '';
       incomingText = messageData.listResponseMessageData?.title || '';
@@ -77,8 +92,28 @@ export async function POST(request: Request) {
                      messageData?.extendedTextMessageData?.text || '';
     }
 
-    console.log(`Identified Text: "${incomingText}"`);
-    console.log(`Selected Button ID: "${selectedButtonId}"`);
+    // Fallback: Green API may nest button response - scan for selectedId/selectedDisplayText
+    const btnTypes = ['templateButtonsReplyMessage', 'templateButtonReplyMessage', 'interactiveButtonsReply', 'interactiveButtonReply', 'buttonsResponseMessage'];
+    const typeMsg = String(messageData?.typeMessage || '');
+    if ((!selectedButtonId || !incomingText) && (messageData || body)) {
+      const found: { id?: string; text?: string } = {};
+      const scan = (o: unknown): void => {
+        if (!o || typeof o !== 'object') return;
+        const obj = o as Record<string, unknown>;
+        if (obj.selectedId !== undefined) found.id = String(obj.selectedId);
+        if (obj.selectedButtonId && typeof obj.selectedButtonId === 'string') found.id = obj.selectedButtonId;
+        if ((obj.selectedDisplayText || obj.selectedButtonText) && typeof (obj.selectedDisplayText || obj.selectedButtonText) === 'string') {
+          found.text = String(obj.selectedDisplayText || obj.selectedButtonText);
+        }
+        Object.values(obj).forEach(scan);
+      };
+      scan(messageData);
+      scan(body);
+      if (found.id) selectedButtonId = found.id;
+      if (found.text) incomingText = found.text;
+    }
+
+    console.log(`Identified Text: "${incomingText}" SelectedButtonId: "${selectedButtonId}" type: ${messageData?.typeMessage}`);
 
     await dbConnect();
 
@@ -258,9 +293,12 @@ export async function POST(request: Request) {
 
     // Handle offer consent (Yes = notify professionals, No = skip)
     if (state.state === 'waiting_for_offer_consent') {
-      const choice = (selectedButtonId || incomingText || '').trim().toLowerCase();
-      const isYes = choice === 'consent_yes' || /כן/.test(choice);
-      const isNo = choice === 'consent_no' || /^לא$/.test(choice);
+      let choice = (selectedButtonId || incomingText || '').trim().toLowerCase();
+      // Green API may send selectedId as "0"/"1" for button index - map to our ids
+      if (choice === '0') choice = 'consent_yes';
+      if (choice === '1') choice = 'consent_no';
+      const isYes = choice === 'consent_yes' || /כן|ken|yes/.test(choice);
+      const isNo = choice === 'consent_no' || /^לא$|^no$/.test(choice);
       if (isYes) {
         state.state = 'waiting_for_offers';
         await state.save();
