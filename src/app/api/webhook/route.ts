@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       selectedButtonId = messageData.buttonsResponseMessageData?.selectedButtonId || '';
       incomingText = messageData.buttonsResponseMessageData?.selectedButtonText || '';
     } else if (messageData?.typeMessage === 'templateButtonsReplyMessage') {
-      const t = messageData.templateButtonsReplyMessageData;
+      const t = messageData.templateButtonsReplyMessageData || messageData.templateButtonReplyMessage;
       selectedButtonId = t?.selectedButtonId || t?.selectedId || '';
       incomingText = t?.selectedButtonText || t?.selectedDisplayText || '';
     } else if (messageData?.typeMessage === 'interactiveButtonsReply') {
@@ -137,12 +137,20 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "היי! את/ה רשום/ה כבעל מקצוע במערכת. להגשת הצעה לעבודה, שלח את מספר העבודה (למשל: 31).");
         return NextResponse.json({ status: 'ok' });
       }
-      // Brand new user - send role selection (client vs professional) via interactive buttons
-      state = await ConversationState.create({ 
-        phone, 
-        state: 'choosing_role', 
-        accumulatedData: {} 
-      });
+      // Brand new user - send role selection ONCE (client vs professional) via interactive buttons
+      try {
+        state = await ConversationState.create({ 
+          phone, 
+          state: 'choosing_role', 
+          accumulatedData: {} 
+        });
+      } catch (e: unknown) {
+        // Duplicate key = another request already created & sent, skip to avoid loop
+        if ((e as { code?: number })?.code === 11000) {
+          return NextResponse.json({ status: 'ok' });
+        }
+        throw e;
+      }
       await sendInteractiveButtonsReply(
         senderId,
         'שלום! 👋 ברוך הבא ל-FixItNow. איך אוכל לעזור?',
@@ -158,13 +166,15 @@ export async function POST(request: Request) {
 
     // Handle role selection (first-time only)
     if (state.state === 'choosing_role') {
-      if (selectedButtonId === 'role_client' || incomingText.includes('לקוח')) {
+      const bid = (selectedButtonId || '').trim().toLowerCase();
+      const txt = (incomingText || '').trim().toLowerCase();
+      if (bid === 'role_client' || txt.includes('לקוח') || txt === 'אני לקוח') {
         state.state = 'welcome';
         await state.save();
         await sendMessage(senderId, WELCOME_MESSAGE);
         return NextResponse.json({ status: 'ok' });
       }
-      if (selectedButtonId === 'role_professional' || incomingText.includes('בעל מקצוע')) {
+      if (bid === 'role_professional' || txt.includes('בעל מקצוע') || txt === 'אני בעל מקצוע') {
         state.state = 'welcome';
         await state.save();
         await sendContact(senderId, {
@@ -175,17 +185,8 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע ומעוניין להירשם למערכת, צור קשר עם סער ניב.\nבנתיים, אפשר להשתמש בבוט כלקוח - ספר לי מה הבעיה שלך.");
         return NextResponse.json({ status: 'ok' });
       }
-      // User sent something else - resend the role selection
-      await sendInteractiveButtonsReply(
-        senderId,
-        'שלום! 👋 ברוך הבא ל-FixItNow. איך אוכל לעזור?',
-        [
-          { buttonId: 'role_client', buttonText: 'אני לקוח' },
-          { buttonId: 'role_professional', buttonText: 'אני בעל מקצוע' },
-        ],
-        'FixItNow 🛠️',
-        'בחר את הסוג שלך'
-      );
+      // User sent something else - don't resend buttons (prevents loop), just prompt to tap
+      await sendMessage(senderId, "נא ללחוץ על אחד הכפתורים למעלה: 'אני לקוח' או 'אני בעל מקצוע' 👆");
       return NextResponse.json({ status: 'ok' });
     }
 
