@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact, sendListMessage } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
@@ -25,9 +25,29 @@ const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של 
 const PROFESSION_LIST_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
 async function sendProfessionSelection(chatId: string) {
-  // sendListMessage returns 403 (temporarily not working). Use 2× sendInteractiveButtonsReply.
-  const fallbackText = `${PROFESSION_LIST_MESSAGE}\n\n*בחר לפי מספר או הקלד את השם:*\n1. אינסטלטור 🔧\n2. חשמלאי ⚡\n3. הנדימן 🛠️\n4. צבעי 🎨`;
+  // Prefer sendListMessage: single message with tap-to-select list (no typing numbers).
   try {
+    await sendListMessage(
+      chatId,
+      PROFESSION_LIST_MESSAGE,
+      'בחר מקצוע',
+      [
+        {
+          title: 'בחר מקצוע',
+          rows: [
+            { rowId: 'prof_plumber', title: 'אינסטלטור 🔧' },
+            { rowId: 'prof_electrician', title: 'חשמלאי ⚡' },
+            { rowId: 'prof_handyman', title: 'הנדימן 🛠️' },
+            { rowId: 'prof_painter', title: 'צבעי 🎨' },
+          ],
+        },
+      ],
+      undefined,
+      'FixItNow 🛠️'
+    );
+  } catch (err) {
+    // If sendListMessage returns 403 (temporarily disabled), use 2× interactive buttons (tap, not type).
+    console.warn('sendListMessage failed, using interactive buttons:', (err as Error).message);
     await sendInteractiveButtonsReply(
       chatId,
       PROFESSION_LIST_MESSAGE,
@@ -48,9 +68,6 @@ async function sendProfessionSelection(chatId: string) {
       undefined,
       'לחץ כאן'
     );
-  } catch (err) {
-    console.warn('sendInteractiveButtonsReply failed, using text fallback:', (err as Error).message);
-    await sendMessage(chatId, fallbackText);
   }
 }
 
