@@ -137,13 +137,27 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "היי! את/ה רשום/ה כבעל מקצוע במערכת. להגשת הצעה לעבודה, שלח את מספר העבודה (למשל: 31).");
         return NextResponse.json({ status: 'ok' });
       }
-      // Brand new user - original flow: go straight to welcome like before (client flow)
-      state = await ConversationState.create({ 
-        phone, 
-        state: 'welcome', 
-        accumulatedData: {} 
-      });
-      await sendMessage(senderId, WELCOME_MESSAGE);
+      // Brand new user - show button menu (client vs professional)
+      try {
+        state = await ConversationState.create({ 
+          phone, 
+          state: 'choosing_role', 
+          accumulatedData: {} 
+        });
+      } catch (e: unknown) {
+        if ((e as { code?: number })?.code === 11000) return NextResponse.json({ status: 'ok' });
+        throw e;
+      }
+      await sendInteractiveButtonsReply(
+        senderId,
+        'שלום! 👋 ברוך הבא ל-FixItNow. איך אוכל לעזור?',
+        [
+          { buttonId: 'role_client', buttonText: 'אני לקוח' },
+          { buttonId: 'role_professional', buttonText: 'אני בעל מקצוע' },
+        ],
+        'FixItNow 🛠️',
+        'בחר את הסוג שלך'
+      );
       return NextResponse.json({ status: 'ok' });
     }
 
@@ -168,15 +182,10 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע ומעוניין להירשם למערכת, צור קשר עם סער ניב.\nבנתיים, אפשר להשתמש בבוט כלקוח - ספר לי מה הבעיה שלך.");
         return NextResponse.json({ status: 'ok' });
       }
-      // User sent something else - send contact + same flow as client (WELCOME_MESSAGE) to break loop
+      // User sent something else - treat as client, send WELCOME_MESSAGE to break loop
       state.state = 'welcome';
       await state.save();
-      await sendContact(senderId, {
-        phoneContact: 972527345641,
-        firstName: 'סער',
-        lastName: 'ניב',
-      });
-      await sendMessage(senderId, "אם אתה בעל מקצוע - צור קשר עם סער ניב למעלה ☝️\n\n" + WELCOME_MESSAGE);
+      await sendMessage(senderId, WELCOME_MESSAGE);
       return NextResponse.json({ status: 'ok' });
     }
 
