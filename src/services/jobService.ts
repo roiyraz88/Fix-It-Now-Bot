@@ -61,25 +61,33 @@ function toIntlPhone(phone: string): number {
   return parseInt('972' + cleaned, 10);
 }
 
-/** Send client contact to professional when they reply with job number - as WhatsApp contact card */
+/** Send client contact to professional - only number + name */
 export async function sendClientContactToProfessional(professionalChatId: string, job: any) {
   const clientPhone = job.clientPhone || '';
   if (!clientPhone) {
     await sendMessage(professionalChatId, `אין פרטי לקוח שמורים לעבודה #${job.shortId}.`);
     return;
   }
+  let clientName = 'לקוח';
+  const cleaned = (clientPhone || '').replace(/\D/g, '');
+  const intlNum = cleaned.startsWith('972') ? cleaned : cleaned.startsWith('0') ? '972' + cleaned.slice(1) : '972' + cleaned;
+  const clientChatId = clientPhone.includes('@') ? clientPhone : `${intlNum}@c.us`;
+  try {
+    const info = await getContactInfo(clientChatId);
+    clientName = (info.contactName || info.name || '').trim() || 'לקוח';
+  } catch (e) {
+    console.error('getContactInfo failed:', (e as Error).message);
+  }
+  const displayPhone = formatPhoneForDisplay(clientPhone);
   try {
     await sendContact(professionalChatId, {
       phoneContact: toIntlPhone(clientPhone),
-      firstName: 'לקוח',
-      lastName: `FixItNow #${job.shortId}`,
+      firstName: clientName,
+      lastName: `#${job.shortId}`,
     });
-    await sendMessage(professionalChatId, `📞 צור קשר עם הלקוח בהקדם!`);
+    await sendMessage(professionalChatId, `${clientName} - ${displayPhone}`);
   } catch (err) {
     console.error('sendContact failed, fallback to text:', (err as Error).message);
-    await sendMessage(
-      professionalChatId,
-      `📞 *פרטי הלקוח לעבודה #${job.shortId}:*\n${formatPhoneForDisplay(clientPhone)}\n\nצור קשר בהקדם!`
-    );
+    await sendMessage(professionalChatId, `${clientName}: ${displayPhone}`);
   }
 }

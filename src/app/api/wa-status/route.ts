@@ -4,9 +4,12 @@ import { getStateInstance } from '@/lib/green-api';
 export async function GET() {
   try {
     const data = await getStateInstance();
-    return NextResponse.json(data);
+    return NextResponse.json({ ok: true, ...data });
   } catch (error) {
-    return NextResponse.json({ error: (error as Error).message }, { status: 500 });
+    return NextResponse.json(
+      { ok: false, error: (error as Error).message },
+      { status: 200 }
+    );
   }
 }
 

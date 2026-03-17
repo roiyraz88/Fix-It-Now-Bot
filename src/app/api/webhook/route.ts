@@ -149,46 +149,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'ok' });
     }
 
-    // 1. Check if it's a professional starting a flow
-    const proState = await ProfessionalState.findOne({ phone });
-
-    // Identify job ID from button or text - only for pros, NOT when client is choosing profession (1-4 = plumber etc)
-    let jobIdFromMessage = '';
+    // 1. Job number reply - HIGHEST PRIORITY: professional replied with job # to get client contact
+    const rawText = (incomingText || '').trim();
     const stateForOrder = await ConversationState.findOne({ phone });
     const isChoosingProfession = stateForOrder?.state === 'choosing_profession';
-    const textLooksLikeProfessionNum = /^[1-4]$/.test((incomingText || '').trim());
+    const textLooksLikeProfessionNum = /^[1-4]$/.test(rawText);
 
-    if (!isChoosingProfession || !textLooksLikeProfessionNum) {
-      if (selectedButtonId.startsWith('apply_job_')) {
-        jobIdFromMessage = selectedButtonId.replace('apply_job_', '');
-      } else if (selectedButtonId.startsWith('job_')) {
-        jobIdFromMessage = selectedButtonId.replace('job_', '');
-      } else if (selectedButtonId.startsWith('accept_offer_')) {
-        // Handle client side
-      } else {
-        const match = incomingText.match(/#(\d+)/) || (!textLooksLikeProfessionNum && incomingText.match(/^(\d+)$/));
-        if (match) {
-          jobIdFromMessage = match[1];
-        }
-      }
+    let jobIdFromMessage = '';
+    if (selectedButtonId.startsWith('apply_job_')) {
+      jobIdFromMessage = selectedButtonId.replace('apply_job_', '');
+    } else if (selectedButtonId.startsWith('job_')) {
+      jobIdFromMessage = selectedButtonId.replace('job_', '');
+    } else if (!textLooksLikeProfessionNum) {
+      const match = rawText.match(/#(\d+)/) || rawText.match(/^(\d+)$/);
+      if (match) jobIdFromMessage = match[1];
+    }
 
-      if (jobIdFromMessage) {
-        const shortId = parseInt(jobIdFromMessage);
-        const job = await Job.findOne({ shortId });
-        if (job) {
-          // Job exists - send client contact to whoever replied (job was only sent to pros)
-          // No need to verify pro in DB - fixes phone format mismatch
-          console.log(`Sending client contact for job #${shortId} to ${phone}`);
-          await ProfessionalState.findOneAndUpdate(
-            { phone },
-            { step: 'idle', currentJobId: undefined },
-            { upsert: false }
-          );
-          await sendClientContactToProfessional(senderId, job);
-          return NextResponse.json({ status: 'ok' });
-        }
+    if (jobIdFromMessage) {
+      const shortId = parseInt(jobIdFromMessage, 10);
+      const job = await Job.findOne({ shortId });
+      if (job) {
+        console.log(`Sending client contact for job #${shortId} to ${phone}`);
+        await ProfessionalState.findOneAndUpdate(
+          { phone },
+          { step: 'idle', currentJobId: undefined },
+          { upsert: false }
+        );
+        await sendClientContactToProfessional(senderId, job);
+        return NextResponse.json({ status: 'ok' });
       }
     }
+
+    // 2. Professional flow
+    const proState = await ProfessionalState.findOne({ phone });
 
     // Handle button for accepting offer (Client side)
     if (selectedButtonId.startsWith('accept_offer_')) {
@@ -205,13 +198,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'ok' });
     }
 
-    // 2. Handle as a client (professionals can also be clients!)
+    // 3. Handle as a client (professionals can also be clients!)
     let state = await ConversationState.findOne({ phone });
     if (!state) {
-      // Verified professionals: don't treat WhatsApp Business auto-greetings as new client
-      const pro = await Professional.findOne({ phone, verified: true });
+      // Verified professionals with no state: last-chance check for job number (in case main block missed it)
+      const phoneAlt = phone.startsWith('972') ? '0' + phone.slice(3) : (phone.startsWith('0') ? '972' + phone.slice(1) : phone);
+      const pro = await Professional.findOne({ $or: [{ phone, verified: true }, { phone: phoneAlt, verified: true }] });
       if (pro) {
-        await sendMessage(senderId, "היי! את/ה רשום/ה כבעל מקצוע במערכת. להגשת הצעה לעבודה, שלח את מספר העבודה (למשל: 31).");
+        const jobNumMatch = rawText.match(/^#?(\d+)$/) && !/^[1-4]$/.test((rawText.match(/^#?(\d+)$/) || [])[1] || '');
+        if (jobNumMatch) {
+          const num = parseInt((rawText.match(/^#?(\d+)$/) || [])[1] || '0', 10);
+          const job = await Job.findOne({ shortId: num });
+          if (job) {
+            await sendClientContactToProfessional(senderId, job);
+            return NextResponse.json({ status: 'ok' });
+          }
+        }
+        await sendMessage(senderId, "היי! את/ה רשום/ה כבעל מקצוע במערכת. לקבלת פרטי לקוח, שלח את מספר העבודה בלבד (למשל: 72).");
         return NextResponse.json({ status: 'ok' });
       }
       // Brand new user - show button menu (client vs professional)
