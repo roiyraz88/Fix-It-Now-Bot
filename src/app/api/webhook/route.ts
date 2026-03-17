@@ -193,7 +193,7 @@ export async function POST(request: Request) {
         firstName: 'סער',
         lastName: 'ניב',
       });
-      await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע - צור קשר עם סער ניב. אם אתה לקוח - ספר לי מה הבעיה שלך.");
+      await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע - צור קשר עם סער ניב.");
       return NextResponse.json({ status: 'ok' });
     }
 
