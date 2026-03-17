@@ -21,21 +21,6 @@ function formatPhone(phone: string): string {
   return phone;
 }
 
-/** Find verified professional by phone - tries multiple formats (972/052/52...) */
-async function findProByPhone(webhookPhone: string) {
-  const digits = (webhookPhone || '').replace(/\D/g, '');
-  if (!digits) return null;
-  const variants: string[] = [webhookPhone, digits];
-  if (digits.startsWith('972')) variants.push('0' + digits.slice(3), digits.slice(3));
-  else if (digits.startsWith('0')) variants.push('972' + digits.slice(1), digits.slice(1));
-  else if (digits.length >= 9) variants.push('972' + digits, '0' + digits);
-  for (const p of [...new Set(variants)].filter(Boolean)) {
-    const pro = await Professional.findOne({ phone: p, verified: true });
-    if (pro) return pro;
-  }
-  return null;
-}
-
 const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
 const PROFESSION_LIST_MESSAGE = " 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
@@ -53,20 +38,6 @@ const PROFESSION_MENU =
 
 async function sendProfessionSelection(chatId: string) {
   await sendMessage(chatId, PROFESSION_MENU);
-}
-
-/** Find verified pro by phone - try exact and normalized formats (972... vs 052...) */
-async function findProByPhone(webhookPhone: string) {
-  const clean = (webhookPhone || '').replace(/\D/g, '');
-  const formats = [clean, webhookPhone];
-  if (clean.startsWith('972')) formats.push('0' + clean.slice(3));
-  else if (clean.startsWith('0')) formats.push('972' + clean.slice(1));
-  for (const p of formats) {
-    if (!p) continue;
-    const pro = await Professional.findOne({ phone: { $regex: new RegExp(`^${p.replace(/\D/g, '')}`) }, verified: true });
-    if (pro) return pro;
-  }
-  return await Professional.findOne({ phone: webhookPhone, verified: true });
 }
 
 export async function POST(request: Request) {
@@ -180,20 +151,6 @@ export async function POST(request: Request) {
 
     // 1. Check if it's a professional starting a flow
     const proState = await ProfessionalState.findOne({ phone });
-
-    // Helper: find verified pro by phone (webhook may send 972..., DB may have 052...)
-    const findProByPhone = async (p: string) => {
-      const cleaned = (p || '').replace(/\D/g, '');
-      const variants = [p, cleaned];
-      if (cleaned.startsWith('972')) variants.push('0' + cleaned.slice(3));
-      else if (cleaned.startsWith('0')) variants.push('972' + cleaned.slice(1));
-      else if (cleaned.length === 9) variants.push('972' + cleaned, '0' + cleaned);
-      for (const v of variants) {
-        const found = await Professional.findOne({ phone: v, verified: true });
-        if (found) return found;
-      }
-      return null;
-    };
 
     // Identify job ID from button or text - only for pros, NOT when client is choosing profession (1-4 = plumber etc)
     let jobIdFromMessage = '';
