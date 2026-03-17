@@ -137,13 +137,13 @@ export default function ProfessionalsAdmin() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8 text-gray-900">
+    <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 text-gray-900">
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-green-700">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-green-700">
           ניהול בעלי מקצוע - FixItNow
         </h1>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 h-fit">
             <h2 className="text-xl font-bold mb-4">הוספת בעל מקצוע חדש</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -270,7 +270,7 @@ export default function ProfessionalsAdmin() {
                     />
                     <label
                       htmlFor="photo-upload"
-                      className={`cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`cursor-pointer inline-flex items-center px-4 py-3 min-h-[44px] border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
                       {uploading ? (
                         <>
@@ -308,7 +308,7 @@ export default function ProfessionalsAdmin() {
 
               <button
                 type="submit"
-                className="w-full py-2 px-4 bg-green-600 text-white rounded-md font-bold hover:bg-green-700"
+                className="w-full py-3 px-4 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 min-h-[44px] touch-manipulation"
               >
                 הוסף למערכת
               </button>
@@ -316,8 +316,66 @@ export default function ProfessionalsAdmin() {
           </div>
 
           {/* List */}
-          <div className="lg:col-cols-2 lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+          <div className="lg:col-span-2">
+            {/* Mobile & Tablet: Cards layout */}
+            <div className="lg:hidden space-y-4">
+              {loading ? (
+                <div className="bg-white rounded-xl p-6 text-center text-gray-500">
+                  טוען...
+                </div>
+              ) : professionals.length === 0 ? (
+                <div className="bg-white rounded-xl p-6 text-center text-gray-500">
+                  אין בעלי מקצוע רשומים
+                </div>
+              ) : (
+                professionals.map((pro) => (
+                  <div
+                    key={pro._id}
+                    className="bg-white rounded-xl shadow-md border border-gray-200 p-4 flex flex-col gap-3"
+                  >
+                    <div className="flex items-center gap-3">
+                      {pro.profilePhotoUrl ? (
+                        <img
+                          src={pro.profilePhotoUrl}
+                          alt={pro.name}
+                          className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 text-lg flex-shrink-0">
+                          👤
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900">{pro.name}</div>
+                        <div className="text-sm text-gray-500">
+                          {formatPhone(pro.phone)}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {getProfessionName(pro.profession)} • {pro.city}
+                        </div>
+                      </div>
+                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800 flex-shrink-0">
+                        מאומת
+                      </span>
+                    </div>
+                    {pro.aboutMe && (
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {pro.aboutMe}
+                      </p>
+                    )}
+                    <button
+                      onClick={() => handleDelete(pro._id)}
+                      className="self-start py-2 px-4 text-red-600 hover:text-red-900 font-bold text-sm border border-red-200 rounded-lg active:bg-red-50 min-h-[44px]"
+                    >
+                      מחק
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop: Table */}
+            <div className="hidden lg:block bg-white rounded-xl shadow-md border border-gray-200 overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>

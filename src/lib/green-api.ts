@@ -32,6 +32,46 @@ export interface Button {
   buttonText: string;
 }
 
+export interface InteractiveButton {
+  buttonId: string;
+  buttonText: string;
+}
+
+/**
+ * Sends a message with interactive buttons (SendInteractiveButtonsReply).
+ * Max 3 buttons, max 25 chars per button.
+ */
+export async function sendInteractiveButtonsReply(
+  chatId: string,
+  body: string,
+  buttons: InteractiveButton[],
+  header?: string,
+  footer?: string
+): Promise<SendMessageResponse> {
+  const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/sendInteractiveButtonsReply/${GREEN_API_CONFIG.apiTokenInstance}`;
+
+  const requestBody = {
+    chatId: chatId.includes('@') ? chatId : `${chatId}@c.us`,
+    body,
+    header: header || '',
+    footer: footer || '',
+    buttons,
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(requestBody),
+  });
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    console.error('Green API sendInteractiveButtonsReply Error:', responseText);
+    throw new Error(`Green API error: ${response.status}`);
+  }
+  return JSON.parse(responseText);
+}
+
 /**
  * Sends a text message to a personal or a group chat.
  */

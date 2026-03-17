@@ -74,8 +74,8 @@ export default function Home() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-gray-50">
-      <div className="z-10 w-full max-w-md items-center justify-between font-mono text-sm bg-white p-8 rounded-xl shadow-lg border border-gray-200">
+    <main className="flex min-h-screen flex-col items-center justify-center py-8 px-4 sm:p-8 lg:p-24 bg-gray-50 overflow-y-auto">
+      <div className="z-10 w-full max-w-md items-center justify-between font-mono text-sm bg-white p-4 sm:p-6 lg:p-8 rounded-xl shadow-lg border border-gray-200">
         <h1 className="text-2xl font-bold mb-6 text-center text-green-600">WhatsApp Green API</h1>
         
         <div className="mb-6 space-y-4">

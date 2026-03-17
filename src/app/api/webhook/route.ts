@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendMessage, sendButtons, sendFileByUrl } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
@@ -44,8 +44,14 @@ export async function POST(request: Request) {
       selectedButtonId = messageData.buttonsResponseMessageData?.selectedButtonId || '';
       incomingText = messageData.buttonsResponseMessageData?.selectedButtonText || '';
     } else if (messageData?.typeMessage === 'templateButtonsReplyMessage') {
-      selectedButtonId = messageData.templateButtonsReplyMessageData?.selectedButtonId || '';
-      incomingText = messageData.templateButtonsReplyMessageData?.selectedButtonText || '';
+      const t = messageData.templateButtonsReplyMessageData;
+      selectedButtonId = t?.selectedButtonId || t?.selectedId || '';
+      incomingText = t?.selectedButtonText || t?.selectedDisplayText || '';
+    } else if (messageData?.typeMessage === 'interactiveButtonsReply') {
+      const ir = messageData.interactiveButtonsReply || messageData.interactiveButtonsReplyData;
+      const btn = Array.isArray(ir?.buttons) ? ir.buttons.find((b: { buttonId?: string }) => b?.buttonId) : null;
+      selectedButtonId = btn?.buttonId || ir?.selectedId || '';
+      incomingText = btn?.buttonText || ir?.selectedDisplayText || '';
     } else if (messageData?.typeMessage === 'listResponseMessage') {
       selectedButtonId = messageData.listResponseMessageData?.rowId || '';
       incomingText = messageData.listResponseMessageData?.title || '';
@@ -131,12 +137,50 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "היי! את/ה רשום/ה כבעל מקצוע במערכת. להגשת הצעה לעבודה, שלח את מספר העבודה (למשל: 31).");
         return NextResponse.json({ status: 'ok' });
       }
+      // Brand new user - send role selection (client vs professional) via interactive buttons
       state = await ConversationState.create({ 
         phone, 
-        state: 'welcome', 
+        state: 'choosing_role', 
         accumulatedData: {} 
       });
-      await sendMessage(senderId, WELCOME_MESSAGE);
+      await sendInteractiveButtonsReply(
+        senderId,
+        'שלום! 👋 ברוך הבא ל-FixItNow. איך אוכל לעזור?',
+        [
+          { buttonId: 'role_client', buttonText: 'אני לקוח' },
+          { buttonId: 'role_professional', buttonText: 'אני בעל מקצוע' },
+        ],
+        'FixItNow 🛠️',
+        'בחר את הסוג שלך'
+      );
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle role selection (first-time only)
+    if (state.state === 'choosing_role') {
+      if (selectedButtonId === 'role_client' || incomingText.includes('לקוח')) {
+        state.state = 'welcome';
+        await state.save();
+        await sendMessage(senderId, WELCOME_MESSAGE);
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (selectedButtonId === 'role_professional' || incomingText.includes('בעל מקצוע')) {
+        state.state = 'welcome';
+        await state.save();
+        await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע ומעוניין להירשם למערכת, פנה למנהל.\nבנתיים, אפשר להשתמש בבוט כלקוח - ספר לי מה הבעיה שלך.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      // User sent something else - resend the role selection
+      await sendInteractiveButtonsReply(
+        senderId,
+        'שלום! 👋 ברוך הבא ל-FixItNow. איך אוכל לעזור?',
+        [
+          { buttonId: 'role_client', buttonText: 'אני לקוח' },
+          { buttonId: 'role_professional', buttonText: 'אני בעל מקצוע' },
+        ],
+        'FixItNow 🛠️',
+        'בחר את הסוג שלך'
+      );
       return NextResponse.json({ status: 'ok' });
     }
 
