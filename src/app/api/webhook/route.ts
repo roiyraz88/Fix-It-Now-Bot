@@ -90,7 +90,8 @@ export async function POST(request: Request) {
       incomingText = messageData.listResponseMessageData?.title || '';
     } else {
       incomingText = messageData?.textMessageData?.textMessage || 
-                     messageData?.extendedTextMessageData?.text || '';
+                     messageData?.extendedTextMessageData?.text || 
+                     (messageData?.typeMessage === 'quotedMessage' && (messageData as any)?.quotedMessage?.textMessage) || '';
     }
 
     // Fallback: Green API may nest button response - scan for selectedId/selectedDisplayText
@@ -110,8 +111,9 @@ export async function POST(request: Request) {
       };
       scan(messageData);
       scan(body);
-      if (found.id) selectedButtonId = found.id;
-      if (found.text) incomingText = found.text;
+      // Only use scan results as fallback - never overwrite good data (prevents corrupting "יש לי נזילה בכיור" etc.)
+      if (found.id && !selectedButtonId) selectedButtonId = found.id;
+      if (found.text && !incomingText) incomingText = found.text;
     }
 
     console.log(`Identified Text: "${incomingText}" SelectedButtonId: "${selectedButtonId}" type: ${messageData?.typeMessage}`);
@@ -263,7 +265,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'ok' });
     }
 
-    // Handle profession selection (client chose "אני לקוח")
+    // Handle profession selection (client chose "אני לקוח") - MUST be before waiting_for_details
     if (state.state === 'choosing_profession') {
       // Use raw text - scan/other logic might overwrite incomingText (Green API format varies)
       const rawText = (messageData?.textMessageData?.textMessage || messageData?.extendedTextMessageData?.text || incomingText || '').trim();
@@ -305,6 +307,41 @@ export async function POST(request: Request) {
       }
       console.log(`[choosing_profession] No match - rawText="${rawText}" txt="${txt}" sel="${sel}" incomingText="${incomingText}"`);
       await sendProfessionSelection(senderId);
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle waiting_for_details - explicit handler to avoid loop, advance to city
+    if (state.state === 'waiting_for_details') {
+      const md = body?.messageData || {};
+      const raw = (incomingText || '').trim() || md.textMessageData?.textMessage || md.extendedTextMessageData?.text || '';
+      // Deep fallback: scan for text in nested structures (quotedMessage, etc.)
+      let detailText = (raw || '').trim();
+      if (!detailText && (md || body)) {
+        const scanText = (o: unknown): string => {
+          if (!o || typeof o !== 'object') return '';
+          const obj = o as Record<string, unknown>;
+          if (typeof obj.textMessage === 'string') return obj.textMessage;
+          if (typeof obj.text === 'string') return obj.text;
+          for (const v of Object.values(obj)) {
+            const found = scanText(v);
+            if (found) return found;
+          }
+          return '';
+        };
+        detailText = (scanText(md) || scanText(body) || '').trim();
+      }
+      if (!detailText) detailText = (incomingText || '').trim();
+      const isIrrelevant = /^(מה השעה|מי אתה|מה אתה|למה|איך|מתי|היי|שלום|הי|בוקר טוב|ערב טוב)\??$/i.test(detailText);
+      if (!isIrrelevant && detailText.length >= 2) {
+        state.accumulatedData = state.accumulatedData || {};
+        state.accumulatedData.detailedDescription = detailText;
+        state.state = 'waiting_for_city';
+        await state.save();
+        await sendMessage(senderId, "באיזו עיר אתה נמצא?");
+        return NextResponse.json({ status: 'ok' });
+      }
+      // Don't resend prompt if we got no text - avoids loop from empty/duplicate webhooks
+      if (detailText) await sendMessage(senderId, "אנא תאר/י במפורט מהי מטרת הפנייה:");
       return NextResponse.json({ status: 'ok' });
     }
 
@@ -757,7 +794,12 @@ export async function POST(request: Request) {
 }
 
 async function handleClientFlow(state: any, senderId: string, text: string, body: any) {
-  console.log(`handleClientFlow - State: ${state.state}, Text: "${text}"`);
+  // Use raw text as fallback - scan or other logic might have corrupted incomingText
+  const md = body?.messageData || {};
+  const rawText = md.textMessageData?.textMessage || md.extendedTextMessageData?.text ||
+    (md.typeMessage === 'quotedMessage' && (md.quotedMessage?.extendedTextMessageData?.text || md.extendedTextMessageData?.text)) || '';
+  const effectiveText = ((text || '').trim() || (rawText || '').trim()).trim();
+  console.log(`handleClientFlow - State: ${state.state}, Text: "${effectiveText}"`);
   
   // If waiting for offers - any message resets and starts new conversation as client
   if (state.state === 'waiting_for_offers') {
@@ -783,30 +825,30 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
 
   // RIGID STEP-BY-STEP FLOW WITH CONTEXT AWARENESS
   
-  // Check for completely irrelevant messages (questions, random text)
-  const isIrrelevant = /^(מה השעה|מי אתה|מה אתה|למה|איך|מתי|היי|שלום|הי|בוקר טוב|ערב טוב)\??$/i.test(text.trim());
+  // Check for completely irrelevant messages (questions, random text) - use effectiveText
+  const isIrrelevant = /^(מה השעה|מי אתה|מה אתה|למה|איך|מתי|היי|שלום|הי|בוקר טוב|ערב טוב)\??$/i.test(effectiveText);
   
   // Step 1: welcome - collect problem description
   if (state.state === 'welcome') {
-    if (isIrrelevant || text.length < 3) {
+    if (isIrrelevant || effectiveText.length < 3) {
       await sendMessage(senderId, "היי! 👋 אני כאן לעזור לך למצוא בעל מקצוע.\nספר לי מה הבעיה שלך? (למשל: יש לי נזילה בכיור)");
       return;
     }
-    const problemType = detectProblemType(text);
-    state.accumulatedData = { problemType, initialDescription: text };
+    const problemType = detectProblemType(effectiveText);
+    state.accumulatedData = { problemType, initialDescription: effectiveText };
     state.state = 'waiting_for_details';
     await state.save();
-        await sendMessage(senderId, "אנא תאר במפורט מהי מטרת הפנייה:");
+    await sendMessage(senderId, "אנא תאר/י במפורט מהי מטרת הפנייה:");
     return;
   }
 
   // Step 2: waiting_for_details - collect more details (initialDescription stays from welcome)
   if (state.state === 'waiting_for_details') {
-    if (isIrrelevant || text.length < 5) {
-      await sendMessage(senderId, "אנא תאר במפורט מהי מטרת הפנייה:");
+    if (isIrrelevant || effectiveText.length < 5) {
+      await sendMessage(senderId, "אנא תאר/י במפורט מהי מטרת הפנייה:");
       return;
     }
-    state.accumulatedData.detailedDescription = text;
+    state.accumulatedData.detailedDescription = effectiveText;
     state.state = 'waiting_for_city';
     await state.save();
     await sendMessage(senderId, "באיזו עיר אתה נמצא?");
@@ -816,7 +858,7 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
   // Step 3: waiting_for_city - collect city and finalize
   if (state.state === 'waiting_for_city') {
     // Check if it looks like a city name (short, Hebrew, no numbers)
-    const cityText = text.trim();
+    const cityText = effectiveText.trim();
     if (cityText.length < 2 || cityText.length > 30 || /\d/.test(cityText)) {
       await sendMessage(senderId, "לא הבנתי - באיזו עיר אתה נמצא? (למשל: תל אביב, חיפה, באר שבע)");
       return;
