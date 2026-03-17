@@ -185,8 +185,15 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע ומעוניין להירשם למערכת, צור קשר עם סער ניב.\nבנתיים, אפשר להשתמש בבוט כלקוח - ספר לי מה הבעיה שלך.");
         return NextResponse.json({ status: 'ok' });
       }
-      // User sent something else - don't resend buttons (prevents loop), just prompt to tap
-      await sendMessage(senderId, "נא ללחוץ על אחד הכפתורים למעלה: 'אני לקוח' או 'אני בעל מקצוע' 👆");
+      // User sent something else - send contact to break loop, move to welcome
+      state.state = 'welcome';
+      await state.save();
+      await sendContact(senderId, {
+        phoneContact: 972527345641,
+        firstName: 'סער',
+        lastName: 'ניב',
+      });
+      await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע - צור קשר עם סער ניב. אם אתה לקוח - ספר לי מה הבעיה שלך.");
       return NextResponse.json({ status: 'ok' });
     }
 
