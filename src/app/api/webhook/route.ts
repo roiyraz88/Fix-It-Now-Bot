@@ -24,8 +24,8 @@ const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של 
 
 const PROFESSION_LIST_MESSAGE = " 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
-const PROFESSION_MENU = `
-איזה בעל מקצוע אוכל לעזור לכם למצוא?
+const PROFESSION_MENU = 
+`איזה בעל מקצוע אוכל לעזור לכם למצוא?
 1 - אינסטלטור 🔧
 2 - חשמלאי ⚡
 3 - הנדימן 🛠️
@@ -135,31 +135,36 @@ export async function POST(request: Request) {
     // 1. Check if it's a professional starting a flow
     const proState = await ProfessionalState.findOne({ phone });
 
-    // Identify job ID from button or text
+    // Identify job ID from button or text - only for pros, NOT when client is choosing profession (1-4 = plumber etc)
     let jobIdFromMessage = '';
-    if (selectedButtonId.startsWith('apply_job_')) {
-      jobIdFromMessage = selectedButtonId.replace('apply_job_', '');
-    } else if (selectedButtonId.startsWith('job_')) {
-      jobIdFromMessage = selectedButtonId.replace('job_', '');
-    } else if (selectedButtonId.startsWith('accept_offer_')) {
-      // Handle client side
-    } else {
-      // Try to find a number in the text (like "7" or "תיתן הצעת מחיר (#7)")
-      const match = incomingText.match(/#(\d+)/) || incomingText.match(/^(\d+)$/);
-      if (match) {
-        jobIdFromMessage = match[1];
-      }
-    }
+    const stateForOrder = await ConversationState.findOne({ phone });
+    const isChoosingProfession = stateForOrder?.state === 'choosing_profession';
+    const textLooksLikeProfessionNum = /^[1-4]$/.test((incomingText || '').trim());
 
-    if (jobIdFromMessage) {
-      const shortId = parseInt(jobIdFromMessage);
-      const job = await Job.findOne({ shortId });
-      if (job) {
-        const pro = await Professional.findOne({ phone, verified: true });
-        if (pro) {
-          console.log(`Professional ${pro.name} requested client contact for job #${shortId}`);
-          await sendClientContactToProfessional(senderId, job);
-          return NextResponse.json({ status: 'ok' });
+    if (!isChoosingProfession || !textLooksLikeProfessionNum) {
+      if (selectedButtonId.startsWith('apply_job_')) {
+        jobIdFromMessage = selectedButtonId.replace('apply_job_', '');
+      } else if (selectedButtonId.startsWith('job_')) {
+        jobIdFromMessage = selectedButtonId.replace('job_', '');
+      } else if (selectedButtonId.startsWith('accept_offer_')) {
+        // Handle client side
+      } else {
+        const match = incomingText.match(/#(\d+)/) || (!textLooksLikeProfessionNum && incomingText.match(/^(\d+)$/));
+        if (match) {
+          jobIdFromMessage = match[1];
+        }
+      }
+
+      if (jobIdFromMessage) {
+        const shortId = parseInt(jobIdFromMessage);
+        const job = await Job.findOne({ shortId });
+        if (job) {
+          const pro = await Professional.findOne({ phone, verified: true });
+          if (pro) {
+            console.log(`Professional ${pro.name} requested client contact for job #${shortId}`);
+            await sendClientContactToProfessional(senderId, job);
+            return NextResponse.json({ status: 'ok' });
+          }
         }
       }
     }
@@ -214,8 +219,11 @@ export async function POST(request: Request) {
 
     // Handle role selection (first-time only)
     if (state.state === 'choosing_role') {
-      const bid = (selectedButtonId || '').trim().toLowerCase();
+      let bid = (selectedButtonId || '').trim().toLowerCase();
       const txt = (incomingText || '').trim().toLowerCase();
+      // Green API may send "0"/"1" as button index - map to our ids
+      if (bid === '0') bid = 'role_client';
+      if (bid === '1') bid = 'role_professional';
       if (bid === 'role_client' || txt.includes('לקוח') || txt === 'אני לקוח') {
         state.state = 'choosing_profession';
         await state.save();
@@ -242,6 +250,10 @@ export async function POST(request: Request) {
 
     // Handle profession selection (client chose "אני לקוח")
     if (state.state === 'choosing_profession') {
+      // Use raw text - scan/other logic might overwrite incomingText (Green API format varies)
+      const rawText = (messageData?.textMessageData?.textMessage || messageData?.extendedTextMessageData?.text || incomingText || '').trim();
+      const txt = (rawText || incomingText || '').trim().replace(/[\u200B-\u200D\uFEFF]/g, '').trim();
+      console.log(`[choosing_profession] rawText="${rawText}" txt="${txt}" sel="${selectedButtonId}"`);
       const profMap: Record<string, { problemType: string; desc: string }> = {
         prof_plumber: { problemType: 'plumber', desc: 'אינסטלטור' },
         prof_electrician: { problemType: 'electrician', desc: 'חשמלאי' },
@@ -256,9 +268,12 @@ export async function POST(request: Request) {
       };
       const sel = (selectedButtonId || '').trim().toLowerCase();
       let prof = profMap[sel];
-      if (!prof && incomingText) {
-        const txt = incomingText.trim();
-        prof = numMap[txt] ?? null;
+      if (!prof) {
+        prof = numMap[sel] ?? numMap[txt] ?? numMap[rawText] ?? null;
+        if (!prof) {
+          const parsed = parseInt(txt, 10);
+          if (!isNaN(parsed) && parsed >= 1 && parsed <= 4) prof = numMap[String(parsed)];
+        }
         if (!prof) {
           if (/אינסטלטור/.test(txt)) prof = { problemType: 'plumber', desc: 'אינסטלטור' };
           else if (/חשמלאי/.test(txt)) prof = { problemType: 'electrician', desc: 'חשמלאי' };
@@ -273,6 +288,7 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "אנא תאר/י במפורט מהי מטרת הפנייה:");
         return NextResponse.json({ status: 'ok' });
       }
+      console.log(`[choosing_profession] No match - rawText="${rawText}" txt="${txt}" sel="${sel}" incomingText="${incomingText}"`);
       await sendProfessionSelection(senderId);
       return NextResponse.json({ status: 'ok' });
     }
