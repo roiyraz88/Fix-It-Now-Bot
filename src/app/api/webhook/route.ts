@@ -167,7 +167,7 @@ export async function POST(request: Request) {
 
     if (jobIdFromMessage) {
       const shortId = parseInt(jobIdFromMessage, 10);
-      const job = await Job.findOne({ shortId });
+      const job = await Job.findOne({ $or: [{ shortId }, { shortId: jobIdFromMessage }] });
       if (job) {
         console.log(`Sending client contact for job #${shortId} to ${phone}`);
         await ProfessionalState.findOneAndUpdate(
@@ -214,7 +214,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ status: 'ok' });
           }
         }
-        await sendMessage(senderId, "היי! את/ה רשום/ה כבעל מקצוע במערכת. לקבלת פרטי לקוח, שלח את מספר העבודה בלבד (למשל: 72).");
+        // Pro sent something else - no need to prompt, just return
         return NextResponse.json({ status: 'ok' });
       }
       // Brand new user - show button menu (client vs professional)
