@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact, sendListMessage } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
@@ -20,7 +20,27 @@ function formatPhone(phone: string): string {
   return phone;
 }
 
-const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nבמה אוכל לעזור לך היום? (למשל: יש לי נזילה בכיור)\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
+const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
+
+const PROFESSION_LIST_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
+
+async function sendProfessionSelection(chatId: string) {
+  await sendListMessage(
+    chatId,
+    PROFESSION_LIST_MESSAGE,
+    'בחר מקצוע',
+    [{
+      title: 'סוג בעל מקצוע',
+      rows: [
+        { rowId: 'prof_plumber', title: 'אינסטלטור 🔧' },
+        { rowId: 'prof_electrician', title: 'חשמלאי ⚡' },
+        { rowId: 'prof_handyman', title: 'הנדימן 🛠️' },
+        { rowId: 'prof_painter', title: 'צבעי 🎨' },
+      ],
+    }],
+    'לחץ כדי לבחור'
+  );
+}
 
 export async function POST(request: Request) {
   try {
@@ -72,11 +92,11 @@ export async function POST(request: Request) {
       
       await ConversationState.create({ 
         phone, 
-        state: 'welcome', 
+        state: 'choosing_profession', 
         accumulatedData: {} 
       });
 
-      await sendMessage(senderId, WELCOME_MESSAGE);
+      await sendProfessionSelection(senderId);
       return NextResponse.json({ status: 'ok' });
     }
 
@@ -166,9 +186,9 @@ export async function POST(request: Request) {
       const bid = (selectedButtonId || '').trim().toLowerCase();
       const txt = (incomingText || '').trim().toLowerCase();
       if (bid === 'role_client' || txt.includes('לקוח') || txt === 'אני לקוח') {
-        state.state = 'welcome';
+        state.state = 'choosing_profession';
         await state.save();
-        await sendMessage(senderId, WELCOME_MESSAGE);
+        await sendProfessionSelection(senderId);
         return NextResponse.json({ status: 'ok' });
       }
       if (bid === 'role_professional' || txt.includes('בעל מקצוע') || txt === 'אני בעל מקצוע') {
@@ -182,10 +202,38 @@ export async function POST(request: Request) {
         await sendMessage(senderId, "היי! 👷 אם אתה בעל מקצוע ומעוניין להירשם למערכת, צור קשר עם סער ניב.\nבנתיים, אפשר להשתמש בבוט כלקוח - ספר לי מה הבעיה שלך.");
         return NextResponse.json({ status: 'ok' });
       }
-      // User sent something else - treat as client, send WELCOME_MESSAGE to break loop
-      state.state = 'welcome';
+      // User sent something else - treat as client, send profession selection
+      state.state = 'choosing_profession';
       await state.save();
-      await sendMessage(senderId, WELCOME_MESSAGE);
+      await sendProfessionSelection(senderId);
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle profession selection (client chose "אני לקוח")
+    if (state.state === 'choosing_profession') {
+      const profMap: Record<string, { problemType: string; desc: string }> = {
+        prof_plumber: { problemType: 'plumber', desc: 'אינסטלטור' },
+        prof_electrician: { problemType: 'electrician', desc: 'חשמלאי' },
+        prof_handyman: { problemType: 'handyman', desc: 'הנדימן' },
+        prof_painter: { problemType: 'painter', desc: 'צבעי' },
+      };
+      const sel = (selectedButtonId || '').trim().toLowerCase();
+      let prof = profMap[sel];
+      if (!prof && incomingText) {
+        const txt = incomingText.trim();
+        if (/אינסטלטור/.test(txt)) prof = { problemType: 'plumber', desc: 'אינסטלטור' };
+        else if (/חשמלאי/.test(txt)) prof = { problemType: 'electrician', desc: 'חשמלאי' };
+        else if (/הנדימן/.test(txt)) prof = { problemType: 'handyman', desc: 'הנדימן' };
+        else if (/צבעי/.test(txt)) prof = { problemType: 'painter', desc: 'צבעי' };
+      }
+      if (prof) {
+        state.accumulatedData = { problemType: prof.problemType, initialDescription: prof.desc };
+        state.state = 'waiting_for_details';
+        await state.save();
+        await sendMessage(senderId, "קיבלתי. ספר לי עוד פרטים על הבעיה:");
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendProfessionSelection(senderId);
       return NextResponse.json({ status: 'ok' });
     }
 
