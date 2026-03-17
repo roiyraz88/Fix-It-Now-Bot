@@ -236,7 +236,7 @@ export async function POST(request: Request) {
         state.accumulatedData = { problemType: prof.problemType, initialDescription: prof.desc };
         state.state = 'waiting_for_details';
         await state.save();
-        await sendMessage(senderId, "אנא תאר במפורט מהי מטרת הפנייה:");
+        await sendMessage(senderId, "אנא תאר/י במפורט מהי מטרת הפנייה:");
         return NextResponse.json({ status: 'ok' });
       }
       await sendProfessionSelection(senderId);
@@ -255,6 +255,428 @@ export async function POST(request: Request) {
         await startProfessionalOfferFlow(senderId, job, currentProState);
         return NextResponse.json({ status: 'ok' });
       }
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = skip)
+    if (state.state === 'waiting_for_offer_consent') {
+      const choice = (selectedButtonId || incomingText || '').trim().toLowerCase();
+      const isYes = choice === 'consent_yes' || /כן/.test(choice);
+      const isNo = choice === 'consent_no' || /^לא$/.test(choice);
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+      } else if (isNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+      } else {
+        await sendInteractiveButtonsReply(
+          senderId,
+          'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+          [
+            { buttonId: 'consent_yes', buttonText: 'כן!' },
+            { buttonId: 'consent_no', buttonText: 'לא' },
+          ],
+          'FixItNow 🛠️',
+          'נא ללחוץ על כפתור'
+        );
+      }
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = cancel)
+    if (state.state === 'waiting_for_offer_consent') {
+      const bid = (selectedButtonId || '').trim().toLowerCase();
+      const txt = (incomingText || '').trim().toLowerCase();
+      const isYes = bid === 'consent_yes' || txt === 'כן!' || txt === 'כן';
+      const isNo = bid === 'consent_no' || txt === 'לא';
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        const job = await Job.findById(state.lastJobId);
+        if (job) await findAndNotifyProfessionals(job._id);
+      } else if (isNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+      }
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = don't)
+    if (state.state === 'waiting_for_offer_consent') {
+      const bid = (selectedButtonId || '').trim().toLowerCase();
+      const txt = (incomingText || '').trim().toLowerCase();
+      const isYes = bid === 'consent_yes' || txt === 'כן!' || txt === 'כן';
+      const isNo = bid === 'consent_no' || txt === 'לא';
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (isNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      // Re-send consent question
+      await sendInteractiveButtonsReply(
+        senderId,
+        'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+        [
+          { buttonId: 'consent_yes', buttonText: 'כן!' },
+          { buttonId: 'consent_no', buttonText: 'לא' },
+        ],
+        'FixItNow 🛠️',
+        'בחר תשובה'
+      );
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (after job creation - Yes = notify pros, No = skip)
+    if (state.state === 'waiting_for_offer_consent') {
+      const bid = (selectedButtonId || '').trim().toLowerCase();
+      const txt = (incomingText || '').trim().toLowerCase();
+      const isYes = bid === 'consent_yes' || txt.includes('כן');
+      const isNo = bid === 'consent_no' || (txt === 'לא' || txt === 'לא ');
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (isNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendInteractiveButtonsReply(
+        senderId,
+        'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+        [
+          { buttonId: 'consent_yes', buttonText: 'כן!' },
+          { buttonId: 'consent_no', buttonText: 'לא' },
+        ],
+        'FixItNow 🛠️',
+        'בחר תשובה'
+      );
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (after job creation)
+    if (state.state === 'waiting_for_offer_consent') {
+      const bid = (selectedButtonId || '').trim().toLowerCase();
+      const txt = (incomingText || '').trim();
+      const isYes = bid === 'consent_yes' || /כן|כן!/.test(txt);
+      const isNo = bid === 'consent_no' || /^לא$/.test(txt);
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        if (state.lastJobId) {
+          await findAndNotifyProfessionals(state.lastJobId.toString());
+        }
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (isNo) {
+        if (state.lastJobId) {
+          await Job.findByIdAndUpdate(state.lastJobId, { status: 'cancelled' });
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendInteractiveButtonsReply(
+        senderId,
+        'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+        [
+          { buttonId: 'consent_yes', buttonText: 'כן!' },
+          { buttonId: 'consent_no', buttonText: 'לא' },
+        ],
+        'FixItNow 🛠️',
+        'בחר תשובה'
+      );
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = cancel)
+    if (state.state === 'waiting_for_offer_consent') {
+      const isYes = selectedButtonId === 'consent_yes' || /כן|yes/i.test(incomingText.trim());
+      const isNo = selectedButtonId === 'consent_no' || /^לא$|^no$/i.test(incomingText.trim());
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+      } else if (isNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+      } else {
+        await sendInteractiveButtonsReply(
+          senderId,
+          'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+          [
+            { buttonId: 'consent_yes', buttonText: 'כן!' },
+            { buttonId: 'consent_no', buttonText: 'לא' },
+          ],
+          'FixItNow 🛠️',
+          'בחר תשובה'
+        );
+      }
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = don't)
+    if (state.state === 'waiting_for_offer_consent') {
+      const bid = (selectedButtonId || '').trim().toLowerCase();
+      const txt = (incomingText || '').trim().toLowerCase();
+      if (bid === 'consent_yes' || txt === 'כן!' || txt === 'כן') {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        const job = await Job.findById(state.lastJobId);
+        if (job) await findAndNotifyProfessionals(job._id);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+      } else if (bid === 'consent_no' || txt === 'לא') {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+      } else {
+        await sendInteractiveButtonsReply(
+          senderId,
+          'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+          [
+            { buttonId: 'consent_yes', buttonText: 'כן!' },
+            { buttonId: 'consent_no', buttonText: 'לא' },
+          ],
+          'FixItNow 🛠️',
+          'נא לבחור כן או לא'
+        );
+      }
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = don't)
+    if (state.state === 'waiting_for_offer_consent') {
+      const isYes = selectedButtonId === 'consent_yes' || /כן|כן!/.test(incomingText.trim());
+      const isNo = selectedButtonId === 'consent_no' || /^לא$/.test(incomingText.trim());
+      if (isYes && state.lastJobId) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (isNo && state.lastJobId) {
+        await Job.findByIdAndUpdate(state.lastJobId, { status: 'cancelled' });
+        state.state = 'completed';
+        state.completedJobId = state.lastJobId;
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendMessage(senderId, "אנא בחר 'כן!' או 'לא'.");
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (after job creation)
+    if (state.state === 'waiting_for_offer_consent') {
+      const consentYes = selectedButtonId === 'consent_yes' || /^\s*כן\!?\s*$/i.test(incomingText.trim());
+      const consentNo = selectedButtonId === 'consent_no' || /^\s*לא\s*$/i.test(incomingText.trim());
+      if (consentYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await findAndNotifyProfessionals(state.lastJobId);
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (consentNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+    }
+
+    // Handle offer consent (after job creation - notify pros only if client says Yes)
+    if (state.state === 'waiting_for_offer_consent') {
+      const choice = (selectedButtonId || incomingText || '').trim();
+      const isYes = choice === 'consent_yes' || /כן|כן!|כן !/.test(choice);
+      const isNo = choice === 'consent_no' || /^לא$/i.test(choice);
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (isNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendMessage(senderId, "אנא בחר 'כן!' או 'לא'.");
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = don't)
+    if (state.state === 'waiting_for_offer_consent') {
+      const isYes = selectedButtonId === 'consent_yes' || /כן|yes/i.test(incomingText.trim());
+      const isNo = selectedButtonId === 'consent_no' || /^לא$/i.test(incomingText.trim());
+      if (isYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (isNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendInteractiveButtonsReply(
+        senderId,
+        'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+        [
+          { buttonId: 'consent_yes', buttonText: 'כן!' },
+          { buttonId: 'consent_no', buttonText: 'לא' },
+        ],
+        'FixItNow 🛠️',
+        'בחר תשובה'
+      );
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = skip)
+    if (state.state === 'waiting_for_offer_consent') {
+      const saidYes = selectedButtonId === 'consent_yes' || /כן|כן!/.test(incomingText.trim());
+      const saidNo = selectedButtonId === 'consent_no' || /^לא$/.test(incomingText.trim());
+      if (saidYes) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await findAndNotifyProfessionals(state.lastJobId);
+        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (saidNo) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, "בסדר. אם תשנה את דעתך, פשוט שלח הודעה.");
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendMessage(senderId, "נא ללחוץ על כן! או לא.");
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify pros, No = skip)
+    if (state.state === 'waiting_for_offer_consent') {
+      const isYes = selectedButtonId === 'consent_yes' || /^\s*כן!?\s*$/i.test(incomingText.trim());
+      const isNo = selectedButtonId === 'consent_no' || /^\s*לא\s*$/i.test(incomingText.trim());
+      if (isYes && state.lastJobId) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await sendMessage(senderId, 'מעולה! אשלח לך הצעות מחיר בקרוב.');
+        await findAndNotifyProfessionals(state.lastJobId);
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (isNo && state.lastJobId) {
+        const job = await Job.findById(state.lastJobId);
+        if (job) {
+          job.status = 'cancelled';
+          await job.save();
+        }
+        state.state = 'completed';
+        await state.save();
+        await sendMessage(senderId, 'בסדר. אם תשנה את דעתך, פשוט שלח הודעה.');
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendMessage(senderId, 'האם את/ה מעוניינ/ת בקבלת הצעות? (כן / לא)');
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // Handle offer consent (Yes = notify professionals, No = skip)
+    if (state.state === 'waiting_for_offer_consent') {
+      const saidYes = selectedButtonId === 'consent_yes' || /כן/.test(incomingText);
+      const saidNo = selectedButtonId === 'consent_no' || /^לא$/.test(incomingText.trim());
+      if (saidYes && state.lastJobId) {
+        state.state = 'waiting_for_offers';
+        await state.save();
+        await sendMessage(senderId, 'מעולה! אשלח לך הצעות מחיר בקרוב.');
+        await findAndNotifyProfessionals(state.lastJobId);
+        return NextResponse.json({ status: 'ok' });
+      }
+      if (saidNo && state.lastJobId) {
+        await Job.findByIdAndUpdate(state.lastJobId, { status: 'cancelled' });
+        state.state = 'completed';
+        state.completedJobId = state.lastJobId;
+        await state.save();
+        await sendMessage(senderId, 'בסדר. אם תשנה את דעתך, פשוט שלח הודעה.');
+        return NextResponse.json({ status: 'ok' });
+      }
+      await sendMessage(senderId, 'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע? (כן / לא)');
+      return NextResponse.json({ status: 'ok' });
     }
 
     await handleClientFlow(state, senderId, incomingText, body);
@@ -394,18 +816,26 @@ async function finalizeJobCreation(state: any, senderId: string) {
   const job = await Job.create(jobData);
   console.log('Job created with shortId:', job.shortId);
 
-  state.state = 'waiting_for_offers';
+  state.state = 'waiting_for_offer_consent';
   state.lastJobId = job._id;
   await state.save();
 
   let message = `תודה! יצרתי קריאה מספר #${job.shortId} 📝\n\n`;
   message += `*✨ הערכת מחיר על ידי AI:*\n`;
   message += `*₪${priceEstimation.min} - ₪${priceEstimation.max}*\n\n`;
-  message += `${priceEstimation.explanation}\n\n`;
-  message += `אני מחפש כעת אנשי מקצוע פנויים ב-${state.accumulatedData.city}. אשלח לך הצעות מחיר בקרוב.`;
+  message += `${priceEstimation.explanation}`;
 
   await sendMessage(senderId, message);
-  await findAndNotifyProfessionals(job._id);
+  await sendInteractiveButtonsReply(
+    senderId,
+    'האם את/ה מעוניינ/ת בקבלת הצעות מבעלי מקצוע באזורך?',
+    [
+      { buttonId: 'consent_yes', buttonText: 'כן!' },
+      { buttonId: 'consent_no', buttonText: 'לא' },
+    ],
+    'FixItNow 🛠️',
+    'בחר תשובה'
+  );
 }
 
 async function handleProfessionalStep(proState: any, senderId: string, text: string) {
