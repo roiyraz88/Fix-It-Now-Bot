@@ -334,6 +334,9 @@ export default function ProfessionalsAdmin() {
                       עיר
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      קצת עליי
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                       סטטוס
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -344,13 +347,13 @@ export default function ProfessionalsAdmin() {
                 <tbody className="bg-white divide-y divide-gray-200">
                   {loading ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center">
+                      <td colSpan={7} className="px-6 py-4 text-center">
                         טוען...
                       </td>
                     </tr>
                   ) : professionals.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="px-6 py-4 text-center">
+                      <td colSpan={7} className="px-6 py-4 text-center">
                         אין בעלי מקצוע רשומים
                       </td>
                     </tr>
@@ -383,6 +386,9 @@ export default function ProfessionalsAdmin() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {pro.city}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600 max-w-[200px]">
+                          {pro.aboutMe || "—"}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
