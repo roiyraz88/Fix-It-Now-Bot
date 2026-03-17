@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact, sendListMessage } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
@@ -24,51 +24,10 @@ const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של 
 
 const PROFESSION_LIST_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
+const PROFESSION_MENU = `*בחר אופציה:*\n1 - אינסטלטור 🔧\n2 - חשמלאי ⚡\n3 - הנדימן 🛠️\n4 - צבעי 🎨\n\nשלח מספר\n\n_טיפ: שלח '9' לאיתחול_`;
+
 async function sendProfessionSelection(chatId: string) {
-  // Prefer sendListMessage: single message with tap-to-select list (no typing numbers).
-  try {
-    await sendListMessage(
-      chatId,
-      PROFESSION_LIST_MESSAGE,
-      'בחר מקצוע',
-      [
-        {
-          title: 'בחר מקצוע',
-          rows: [
-            { rowId: 'prof_plumber', title: 'אינסטלטור 🔧' },
-            { rowId: 'prof_electrician', title: 'חשמלאי ⚡' },
-            { rowId: 'prof_handyman', title: 'הנדימן 🛠️' },
-            { rowId: 'prof_painter', title: 'צבעי 🎨' },
-          ],
-        },
-      ],
-      undefined,
-      'FixItNow 🛠️'
-    );
-  } catch (err) {
-    // If sendListMessage returns 403 (temporarily disabled), use 2× interactive buttons (tap, not type).
-    console.warn('sendListMessage failed, using interactive buttons:', (err as Error).message);
-    await sendInteractiveButtonsReply(
-      chatId,
-      PROFESSION_LIST_MESSAGE,
-      [
-        { buttonId: 'prof_plumber', buttonText: 'אינסטלטור 🔧' },
-        { buttonId: 'prof_electrician', buttonText: 'חשמלאי ⚡' },
-      ],
-      'FixItNow 🛠️',
-      'בחר מקצוע'
-    );
-    await sendInteractiveButtonsReply(
-      chatId,
-      'או בחר:',
-      [
-        { buttonId: 'prof_handyman', buttonText: 'הנדימן 🛠️' },
-        { buttonId: 'prof_painter', buttonText: 'צבעי 🎨' },
-      ],
-      undefined,
-      'לחץ כאן'
-    );
-  }
+  await sendMessage(chatId, PROFESSION_MENU);
 }
 
 export async function POST(request: Request) {
