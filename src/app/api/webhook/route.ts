@@ -7,7 +7,7 @@ import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import Offer from '@/models/Offer';
 import Counter from '@/models/Counter';
-import { findAndNotifyProfessionals, startProfessionalOfferFlow } from '@/services/jobService';
+import { findAndNotifyProfessionals, sendClientContactToProfessional } from '@/services/jobService';
 import { getPriceEstimation } from '@/services/openaiService';
 
 // Format phone number: 97252... → 052...
@@ -24,7 +24,7 @@ const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של 
 
 const PROFESSION_LIST_MESSAGE = " 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
-const PROFESSION_MENU = `ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️
+const PROFESSION_MENU = `
 איזה בעל מקצוע אוכל לעזור לכם למצוא?
 1 - אינסטלטור 🔧
 2 - חשמלאי ⚡
@@ -122,9 +122,8 @@ export async function POST(request: Request) {
       if (job) {
         const pro = await Professional.findOne({ phone, verified: true });
         if (pro) {
-          console.log(`Professional ${pro.name} starting flow for job #${shortId}`);
-          let currentProState = proState || await ProfessionalState.create({ phone, step: 'idle' });
-          await startProfessionalOfferFlow(senderId, job, currentProState);
+          console.log(`Professional ${pro.name} requested client contact for job #${shortId}`);
+          await sendClientContactToProfessional(senderId, job);
           return NextResponse.json({ status: 'ok' });
         }
       }
@@ -252,7 +251,7 @@ export async function POST(request: Request) {
       const job = await Job.findOne({ shortId: jobNum });
       if (job) {
         let currentProState = proState || await ProfessionalState.create({ phone, step: 'idle' });
-        await startProfessionalOfferFlow(senderId, job, currentProState);
+          await sendClientContactToProfessional(senderId, job);
         return NextResponse.json({ status: 'ok' });
       }
     }
@@ -266,7 +265,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
       } else if (isNo) {
         const job = await Job.findById(state.lastJobId);
         if (job) {
@@ -300,7 +299,7 @@ export async function POST(request: Request) {
       if (isYes) {
         state.state = 'waiting_for_offers';
         await state.save();
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         const job = await Job.findById(state.lastJobId);
         if (job) await findAndNotifyProfessionals(job._id);
       } else if (isNo) {
@@ -326,7 +325,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         return NextResponse.json({ status: 'ok' });
       }
       if (isNo) {
@@ -364,7 +363,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         return NextResponse.json({ status: 'ok' });
       }
       if (isNo) {
@@ -400,7 +399,7 @@ export async function POST(request: Request) {
       if (isYes) {
         state.state = 'waiting_for_offers';
         await state.save();
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         if (state.lastJobId) {
           await findAndNotifyProfessionals(state.lastJobId.toString());
         }
@@ -436,7 +435,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
       } else if (isNo) {
         const job = await Job.findById(state.lastJobId);
         if (job) {
@@ -470,7 +469,7 @@ export async function POST(request: Request) {
         await state.save();
         const job = await Job.findById(state.lastJobId);
         if (job) await findAndNotifyProfessionals(job._id);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
       } else if (bid === 'consent_no' || txt === 'לא') {
         const job = await Job.findById(state.lastJobId);
         if (job) {
@@ -503,7 +502,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         return NextResponse.json({ status: 'ok' });
       }
       if (isNo && state.lastJobId) {
@@ -525,7 +524,7 @@ export async function POST(request: Request) {
       if (consentYes) {
         state.state = 'waiting_for_offers';
         await state.save();
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         await findAndNotifyProfessionals(state.lastJobId);
         return NextResponse.json({ status: 'ok' });
       }
@@ -551,7 +550,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         return NextResponse.json({ status: 'ok' });
       }
       if (isNo) {
@@ -577,7 +576,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         return NextResponse.json({ status: 'ok' });
       }
       if (isNo) {
@@ -612,7 +611,7 @@ export async function POST(request: Request) {
         state.state = 'waiting_for_offers';
         await state.save();
         await findAndNotifyProfessionals(state.lastJobId);
-        await sendMessage(senderId, "מעולה! אשלח לך הצעות מחיר בקרוב.");
+        await sendMessage(senderId, "התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!");
         return NextResponse.json({ status: 'ok' });
       }
       if (saidNo) {
@@ -637,7 +636,7 @@ export async function POST(request: Request) {
       if (isYes && state.lastJobId) {
         state.state = 'waiting_for_offers';
         await state.save();
-        await sendMessage(senderId, 'מעולה! אשלח לך הצעות מחיר בקרוב.');
+        await sendMessage(senderId, 'התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!');
         await findAndNotifyProfessionals(state.lastJobId);
         return NextResponse.json({ status: 'ok' });
       }
@@ -663,7 +662,7 @@ export async function POST(request: Request) {
       if (saidYes && state.lastJobId) {
         state.state = 'waiting_for_offers';
         await state.save();
-        await sendMessage(senderId, 'מעולה! אשלח לך הצעות מחיר בקרוב.');
+        await sendMessage(senderId, 'התחלתי בחיפושים אחר בעל מקצוע, בדקות הקרובות תקבל מגוון הצעות מבעלי מקצוע באזורך!');
         await findAndNotifyProfessionals(state.lastJobId);
         return NextResponse.json({ status: 'ok' });
       }
@@ -691,9 +690,15 @@ export async function POST(request: Request) {
 async function handleClientFlow(state: any, senderId: string, text: string, body: any) {
   console.log(`handleClientFlow - State: ${state.state}, Text: "${text}"`);
   
-  // If waiting for offers
+  // If waiting for offers - any message resets and starts new conversation as client
   if (state.state === 'waiting_for_offers') {
-    await handleOfferSelection(state, senderId, text);
+    await ConversationState.deleteOne({ phone: state.phone });
+    await ConversationState.create({
+      phone: state.phone,
+      state: 'choosing_profession',
+      accumulatedData: {},
+    });
+    await sendProfessionSelection(senderId);
     return;
   }
 

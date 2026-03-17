@@ -22,7 +22,7 @@ export async function findAndNotifyProfessionals(jobId: string) {
   if (!job) return;
 
   console.log(`--- BROADCASTING NEW JOB #${job.shortId} ---`);
-  
+
   const professionals = await Professional.find({ verified: true });
   console.log(`Found ${professionals.length} verified professionals to notify.`);
 
@@ -32,13 +32,8 @@ export async function findAndNotifyProfessionals(jobId: string) {
   if (job.detailedDescription) {
     message += `*פירוט:* ${job.detailedDescription}\n`;
   }
-  message += `*עיר:* ${job.city || 'לא צוין'}\n`;
-  
-  if (job.photoUrl) {
-    message += `\n📷 *תמונה מצורפת*\n`;
-  }
-
-  message += `\n*להגשת הצעה - השב עם המספר ${job.shortId}*`;
+  message += `*עיר:* ${job.city || 'לא צוין'}\n\n`;
+  message += `לקבלת הטלפון של הלקוח השב עם המספר ${job.shortId}`;
 
   for (const pro of professionals) {
     const cleanPhone = pro.phone.replace(/\D/g, '');
@@ -51,11 +46,19 @@ export async function findAndNotifyProfessionals(jobId: string) {
   }
 }
 
-export async function startProfessionalOfferFlow(senderId: string, job: any, proState: any) {
-  proState.currentJobId = job._id;
-  proState.step = 'awaiting_price';
-  proState.accumulatedOffer = {};
-  await proState.save();
+function formatPhoneForDisplay(phone: string): string {
+  if (!phone) return phone;
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.startsWith('972')) return '0' + cleaned.slice(3);
+  return cleaned.startsWith('0') ? cleaned : '0' + cleaned;
+}
 
-  await sendMessage(senderId, `מתחילים הצעה עבור עבודה #${job.shortId}.\nמה הצעת המחיר שלך? (בשקלים)`);
+/** Send client contact to professional when they reply with job number */
+export async function sendClientContactToProfessional(professionalChatId: string, job: any) {
+  const clientPhone = job.clientPhone || '';
+  const formatted = formatPhoneForDisplay(clientPhone);
+  await sendMessage(
+    professionalChatId,
+    `📞 *פרטי הלקוח לעבודה #${job.shortId}:*\n${formatted}\n\nצור קשר בהקדם!`
+  );
 }
