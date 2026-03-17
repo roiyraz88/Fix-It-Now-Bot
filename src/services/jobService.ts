@@ -1,7 +1,7 @@
 import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import ProfessionalState from '@/models/ProfessionalState';
-import { sendMessage, sendListMessage } from '@/lib/green-api';
+import { sendMessage } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 
 const getProfessionName = (type: string): string => {

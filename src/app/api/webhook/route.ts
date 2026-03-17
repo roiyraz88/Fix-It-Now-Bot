@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact, sendListMessage } from '@/lib/green-api';
+import { sendMessage, sendButtons, sendFileByUrl, sendInteractiveButtonsReply, sendContact } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
@@ -25,21 +25,33 @@ const WELCOME_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של 
 const PROFESSION_LIST_MESSAGE = "ברוך הבא! אני הבוט מבוסס ה-AI של FixItNow. 🛠️\nאיזה בעל מקצוע אוכל לעזור לכם למצוא?\n\n*טיפ:* ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.";
 
 async function sendProfessionSelection(chatId: string) {
-  await sendListMessage(
-    chatId,
-    PROFESSION_LIST_MESSAGE,
-    'בחר מקצוע',
-    [{
-      title: 'סוג בעל מקצוע',
-      rows: [
-        { rowId: 'prof_plumber', title: 'אינסטלטור 🔧' },
-        { rowId: 'prof_electrician', title: 'חשמלאי ⚡' },
-        { rowId: 'prof_handyman', title: 'הנדימן 🛠️' },
-        { rowId: 'prof_painter', title: 'צבעי 🎨' },
+  // sendListMessage returns 403 (temporarily not working). Use 2× sendInteractiveButtonsReply.
+  const fallbackText = `${PROFESSION_LIST_MESSAGE}\n\n*בחר לפי מספר או הקלד את השם:*\n1. אינסטלטור 🔧\n2. חשמלאי ⚡\n3. הנדימן 🛠️\n4. צבעי 🎨`;
+  try {
+    await sendInteractiveButtonsReply(
+      chatId,
+      PROFESSION_LIST_MESSAGE,
+      [
+        { buttonId: 'prof_plumber', buttonText: 'אינסטלטור 🔧' },
+        { buttonId: 'prof_electrician', buttonText: 'חשמלאי ⚡' },
       ],
-    }],
-    'לחץ כדי לבחור'
-  );
+      'FixItNow 🛠️',
+      'בחר מקצוע'
+    );
+    await sendInteractiveButtonsReply(
+      chatId,
+      'או בחר:',
+      [
+        { buttonId: 'prof_handyman', buttonText: 'הנדימן 🛠️' },
+        { buttonId: 'prof_painter', buttonText: 'צבעי 🎨' },
+      ],
+      undefined,
+      'לחץ כאן'
+    );
+  } catch (err) {
+    console.warn('sendInteractiveButtonsReply failed, using text fallback:', (err as Error).message);
+    await sendMessage(chatId, fallbackText);
+  }
 }
 
 export async function POST(request: Request) {
@@ -217,14 +229,23 @@ export async function POST(request: Request) {
         prof_handyman: { problemType: 'handyman', desc: 'הנדימן' },
         prof_painter: { problemType: 'painter', desc: 'צבעי' },
       };
+      const numMap: Record<string, { problemType: string; desc: string }> = {
+        '1': { problemType: 'plumber', desc: 'אינסטלטור' },
+        '2': { problemType: 'electrician', desc: 'חשמלאי' },
+        '3': { problemType: 'handyman', desc: 'הנדימן' },
+        '4': { problemType: 'painter', desc: 'צבעי' },
+      };
       const sel = (selectedButtonId || '').trim().toLowerCase();
       let prof = profMap[sel];
       if (!prof && incomingText) {
         const txt = incomingText.trim();
-        if (/אינסטלטור/.test(txt)) prof = { problemType: 'plumber', desc: 'אינסטלטור' };
-        else if (/חשמלאי/.test(txt)) prof = { problemType: 'electrician', desc: 'חשמלאי' };
-        else if (/הנדימן/.test(txt)) prof = { problemType: 'handyman', desc: 'הנדימן' };
-        else if (/צבעי/.test(txt)) prof = { problemType: 'painter', desc: 'צבעי' };
+        prof = numMap[txt] ?? null;
+        if (!prof) {
+          if (/אינסטלטור/.test(txt)) prof = { problemType: 'plumber', desc: 'אינסטלטור' };
+          else if (/חשמלאי/.test(txt)) prof = { problemType: 'electrician', desc: 'חשמלאי' };
+          else if (/הנדימן/.test(txt)) prof = { problemType: 'handyman', desc: 'הנדימן' };
+          else if (/צבעי/.test(txt)) prof = { problemType: 'painter', desc: 'צבעי' };
+        }
       }
       if (prof) {
         state.accumulatedData = { problemType: prof.problemType, initialDescription: prof.desc };
