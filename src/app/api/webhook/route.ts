@@ -7,6 +7,7 @@ import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import Offer from '@/models/Offer';
 import Counter from '@/models/Counter';
+import ProcessedMessage from '@/models/ProcessedMessage';
 import { findAndNotifyProfessionals, sendClientContactToProfessional } from '@/services/jobService';
 import { getPriceEstimation } from '@/services/openaiService';
 
@@ -116,6 +117,20 @@ export async function POST(request: Request) {
     console.log(`Identified Text: "${incomingText}" SelectedButtonId: "${selectedButtonId}" type: ${messageData?.typeMessage}`);
 
     await dbConnect();
+
+    // Idempotency: prevent duplicate webhook processing (Green API may send same message twice)
+    const idMessage = body.idMessage;
+    if (idMessage) {
+      try {
+        await ProcessedMessage.create({ idMessage });
+      } catch (e: unknown) {
+        if ((e as { code?: number })?.code === 11000) {
+          console.log(`[Idempotency] Skipping duplicate message ${idMessage}`);
+          return NextResponse.json({ status: 'ok' });
+        }
+        throw e;
+      }
+    }
 
     // 0. Handle reset logic
     if (incomingText.trim() === '9') {
