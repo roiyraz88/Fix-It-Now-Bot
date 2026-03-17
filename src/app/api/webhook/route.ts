@@ -107,14 +107,29 @@ export async function POST(request: Request) {
         if ((obj.selectedDisplayText || obj.selectedButtonText) && typeof (obj.selectedDisplayText || obj.selectedButtonText) === 'string') {
           found.text = String(obj.selectedDisplayText || obj.selectedButtonText);
         }
+        if (typeof obj.textMessage === 'string') found.text = obj.textMessage;
+        if (typeof obj.text === 'string') found.text = (found.text || obj.text) as string;
         Object.values(obj).forEach(scan);
       };
       scan(messageData);
       scan(body);
-      // Only use scan results as fallback - never overwrite good data (prevents corrupting "יש לי נזילה בכיור" etc.)
       if (found.id && !selectedButtonId) selectedButtonId = found.id;
       if (found.text && !incomingText) incomingText = found.text;
     }
+
+    // Fallback: deep scan for job number (e.g. "74") - Green API format can vary
+    const scanForNum = (o: unknown): string => {
+      if (!o || typeof o !== 'object') return '';
+      const obj = o as Record<string, unknown>;
+      for (const v of Object.values(obj)) {
+        if (typeof v === 'string' && /^#?\d+$/.test(v.trim())) return v.trim();
+        const r = scanForNum(v);
+        if (r) return r;
+      }
+      return '';
+    };
+    const numFromBody = scanForNum(body);
+    if (numFromBody && (!incomingText || !incomingText.trim())) incomingText = numFromBody;
 
     console.log(`Identified Text: "${incomingText}" SelectedButtonId: "${selectedButtonId}" type: ${messageData?.typeMessage}`);
 
@@ -150,15 +165,29 @@ export async function POST(request: Request) {
     }
 
     // 1. Job number reply - HIGHEST PRIORITY: professional replied with job # to get client contact
-    const rawText = (incomingText || '').trim();
+    let rawText = (incomingText || '').trim();
+    // Fallback: if empty, deep-scan body for "74" etc (Green API format can vary)
+    if (!rawText) {
+      const scanForNum = (o: unknown): string => {
+        if (!o || typeof o !== 'object') return '';
+        const obj = o as Record<string, unknown>;
+        for (const v of Object.values(obj)) {
+          if (typeof v === 'string' && /^#?\d+$/.test(v.trim())) return v.trim();
+          const r = scanForNum(v);
+          if (r) return r;
+        }
+        return '';
+      };
+      rawText = scanForNum(body);
+    }
     const stateForOrder = await ConversationState.findOne({ phone });
     const isChoosingProfession = stateForOrder?.state === 'choosing_profession';
     const textLooksLikeProfessionNum = /^[1-4]$/.test(rawText);
 
     let jobIdFromMessage = '';
-    if (selectedButtonId.startsWith('apply_job_')) {
+    if (selectedButtonId?.startsWith('apply_job_')) {
       jobIdFromMessage = selectedButtonId.replace('apply_job_', '');
-    } else if (selectedButtonId.startsWith('job_')) {
+    } else if (selectedButtonId?.startsWith('job_')) {
       jobIdFromMessage = selectedButtonId.replace('job_', '');
     } else if (!textLooksLikeProfessionNum) {
       const match = rawText.match(/#(\d+)/) || rawText.match(/^(\d+)$/);
@@ -169,7 +198,7 @@ export async function POST(request: Request) {
       const shortId = parseInt(jobIdFromMessage, 10);
       const job = await Job.findOne({ $or: [{ shortId }, { shortId: jobIdFromMessage }] });
       if (job) {
-        console.log(`Sending client contact for job #${shortId} to ${phone}`);
+        console.log(`[Job] Sending client contact for job #${shortId} to ${phone}`);
         await ProfessionalState.findOneAndUpdate(
           { phone },
           { step: 'idle', currentJobId: undefined },
@@ -178,6 +207,7 @@ export async function POST(request: Request) {
         await sendClientContactToProfessional(senderId, job);
         return NextResponse.json({ status: 'ok' });
       }
+      console.log(`[Job] No job found for shortId ${shortId} (rawText="${rawText}") - check DB`);
     }
 
     // 2. Professional flow

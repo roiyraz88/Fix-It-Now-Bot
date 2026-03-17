@@ -228,15 +228,19 @@ export async function sendContact(
   return JSON.parse(responseText);
 }
 
-/** Get contact info (name etc.) - chatId format: 972521234567@c.us */
+/** Get contact info (name etc.) - chatId format: 972521234567@c.us. 5s timeout to avoid blocking. */
 export async function getContactInfo(chatId: string): Promise<{ name?: string; contactName?: string }> {
   const url = `${GREEN_API_CONFIG.apiUrl}/waInstance${GREEN_API_CONFIG.idInstance}/getContactInfo/${GREEN_API_CONFIG.apiTokenInstance}`;
   const body = { chatId: chatId.includes('@') ? chatId : `${chatId}@c.us` };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal: controller.signal,
   });
+  clearTimeout(timeout);
   const data = await response.json();
   if (!response.ok) {
     console.error('Green API getContactInfo Error:', data);
