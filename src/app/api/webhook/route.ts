@@ -210,6 +210,13 @@ export async function POST(request: Request) {
       console.log(`[Job] No job found for shortId ${shortId} (rawText="${rawText}") - check DB`);
     }
 
+    // Verified professional who didn't send job number - no client flow, no menus
+    const phoneAlt = phone.startsWith('972') ? '0' + phone.slice(3) : (phone.startsWith('0') ? '972' + phone.slice(1) : phone);
+    const isVerifiedPro = await Professional.findOne({ $or: [{ phone, verified: true }, { phone: phoneAlt, verified: true }] });
+    if (isVerifiedPro) {
+      return NextResponse.json({ status: 'ok' });
+    }
+
     // 2. Professional flow
     const proState = await ProfessionalState.findOne({ phone });
 

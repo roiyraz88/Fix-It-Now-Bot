@@ -85,7 +85,6 @@ export async function sendClientContactToProfessional(professionalChatId: string
       firstName: clientName,
       lastName: `#${job.shortId}`,
     });
-    await sendMessage(professionalChatId, `${clientName} - ${displayPhone}`);
   } catch (err) {
     console.error('sendContact failed, fallback to text:', (err as Error).message);
     await sendMessage(professionalChatId, `${clientName}: ${displayPhone}`);
