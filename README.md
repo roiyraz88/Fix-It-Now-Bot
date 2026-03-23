@@ -34,3 +34,13 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## FixItNow – מעקב לקוח (חד־פעמי, 30 דק׳)
+
+לאחר שהלקוח אישר חיפוש בעלי מקצוע, נשלחת התראה לבעלי מקצוע. **פעם אחת בלבד** – כ־30 דקות אחרי **ההתראה הראשונה** לבעלי המקצוע – ה־cron שולח ללקוח שאלה עם כפתורי כן/לא (לא חוזר).
+
+- הוסף ב־Vercel (או `.env`) את **`CRON_SECRET`** (מחרוזת אקראית).
+- ב־Vercel: Cron מוגדר ב־`vercel.json` ל־`/api/cron/client-followup` כל 5 דקות. Vercel שולח `Authorization: Bearer <CRON_SECRET>` אוטומטית לפי [התיעוד](https://vercel.com/docs/cron-jobs).
+- בלי Vercel: קרא ל־`GET https://<your-domain>/api/cron/client-followup` עם אותו header כל כמה דקות (למשל cron חיצוני).
+
+אם `CRON_SECRET` לא מוגדר, הקריאה ל־cron תחזיר 503.

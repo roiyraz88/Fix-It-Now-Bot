@@ -11,6 +11,12 @@ export interface IJob extends Document {
   photoUrl?: string;
   status: 'collecting_info' | 'searching_professionals' | 'waiting_for_offers' | 'offers_ready' | 'assigned' | 'completed' | 'cancelled';
   assignedProfessionalPhone?: string;
+  /** First time pros were notified (for one-time ~30min client follow-up) */
+  firstProsNotifiedAt?: Date;
+  /** Client received the "need more offers?" question */
+  clientFollowUpSent?: boolean;
+  /** If false, client said they don't need more – block sharing contact */
+  acceptingMorePros?: boolean;
 }
 
 const JobSchema: Schema = new Schema({
@@ -28,6 +34,9 @@ const JobSchema: Schema = new Schema({
     default: 'collecting_info'
   },
   assignedProfessionalPhone: { type: String },
+  firstProsNotifiedAt: { type: Date },
+  clientFollowUpSent: { type: Boolean, default: false },
+  acceptingMorePros: { type: Boolean, default: true },
 }, { timestamps: true });
 
 export default mongoose.models.Job || mongoose.model<IJob>('Job', JobSchema);

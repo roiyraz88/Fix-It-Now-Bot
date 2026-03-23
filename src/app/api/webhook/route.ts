@@ -4,11 +4,18 @@ import dbConnect from '@/lib/mongodb';
 import ConversationState from '@/models/ConversationState';
 import ProfessionalState from '@/models/ProfessionalState';
 import Job from '@/models/Job';
+import type { IJob } from '@/models/Job';
 import Professional from '@/models/Professional';
 import Offer from '@/models/Offer';
 import Counter from '@/models/Counter';
 import ProcessedMessage from '@/models/ProcessedMessage';
-import { findAndNotifyProfessionals, sendClientContactToProfessional } from '@/services/jobService';
+import {
+  findAndNotifyProfessionals,
+  sendClientContactToProfessional,
+  notifyProfessionalsJobStillOpen,
+  notifyProfessionalsJobFilledByClient,
+  phonesMatch,
+} from '@/services/jobService';
 import { getPriceEstimation } from '@/services/openaiService';
 
 // Format phone number: 97252... → 052...
@@ -161,6 +168,48 @@ export async function POST(request: Request) {
       });
 
       await sendProfessionSelection(senderId);
+      return NextResponse.json({ status: 'ok' });
+    }
+
+    // 0b. Client follow-up (~30min, one-time): more offers yes / no
+    const stateEarly = await ConversationState.findOne({ phone });
+    const bidFollow = (selectedButtonId || '').trim();
+    const followYes = bidFollow.match(/^follow_more_yes_(\d+)$/);
+    const followNo = bidFollow.match(/^follow_more_no_(\d+)$/);
+    let jobFollow: IJob | null = null;
+    let clientWantsMore: boolean | null = null;
+    if (followYes || followNo) {
+      const sid = parseInt((followYes || followNo)![1], 10);
+      const j = await Job.findOne({ shortId: sid });
+      if (j?.clientFollowUpSent && phonesMatch(phone, j.clientPhone)) {
+        jobFollow = j;
+        clientWantsMore = !!followYes;
+      }
+    } else if ((bidFollow === '0' || bidFollow === '1') && stateEarly?.lastJobId) {
+      jobFollow = await Job.findById(stateEarly.lastJobId);
+      if (jobFollow?.clientFollowUpSent && phonesMatch(phone, jobFollow.clientPhone)) {
+        clientWantsMore = bidFollow === '0';
+      } else {
+        jobFollow = null;
+      }
+    }
+    if (jobFollow && clientWantsMore !== null) {
+      if (clientWantsMore) {
+        await sendMessage(
+          senderId,
+          'אין בעיה, אנחנו מיד מפנים אליך בעלי מקצוע נוספים! 🛠️'
+        );
+        await notifyProfessionalsJobStillOpen(jobFollow._id.toString());
+      } else {
+        jobFollow.acceptingMorePros = false;
+        jobFollow.status = 'completed';
+        await jobFollow.save();
+        await sendMessage(
+          senderId,
+          'מקווים שעזרנו לך – נשמח לראות אותך שוב בפעם הבאה! 👋'
+        );
+        await notifyProfessionalsJobFilledByClient(jobFollow._id.toString());
+      }
       return NextResponse.json({ status: 'ok' });
     }
 

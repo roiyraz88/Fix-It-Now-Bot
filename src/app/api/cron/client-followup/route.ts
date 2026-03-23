@@ -1,0 +1,68 @@
+import { NextResponse } from 'next/server';
+import Job from '@/models/Job';
+import dbConnect from '@/lib/mongodb';
+import { sendInteractiveButtonsReply } from '@/lib/green-api';
+
+const THIRTY_MIN_MS = 30 * 60 * 1000;
+
+function clientChatIdFromPhone(clientPhone: string): string {
+  const clean = (clientPhone || '').replace(/\D/g, '');
+  const intl = clean.startsWith('972') ? clean : clean.startsWith('0') ? '972' + clean.slice(1) : '972' + clean;
+  return `${intl}@c.us`;
+}
+
+/**
+ * Vercel Cron (or external) – every 5 min.
+ * One-time: sends client the "more offers?" question ~30 min after pros were first notified (clientFollowUpSent prevents repeats).
+ * Set CRON_SECRET in env; Vercel cron sends Authorization: Bearer <CRON_SECRET>
+ */
+export async function GET(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 503 });
+  }
+  const auth = request.headers.get('authorization');
+  if (auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  await dbConnect();
+  const cutoff = new Date(Date.now() - THIRTY_MIN_MS);
+
+  const jobs = await Job.find({
+    firstProsNotifiedAt: { $lte: cutoff },
+    clientFollowUpSent: { $ne: true },
+    acceptingMorePros: { $ne: false },
+    status: { $in: ['waiting_for_offers', 'searching_professionals'] },
+  }).limit(50);
+
+  let sent = 0;
+  const errors: string[] = [];
+
+  for (const job of jobs) {
+    try {
+      await sendInteractiveButtonsReply(
+        clientChatIdFromPhone(job.clientPhone),
+        'האם כבר סגרת עם בעל מקצוע, או שאת/ה מעוניין/ת בהצעות נוספות מבעלי מקצוע?',
+        [
+          { buttonId: `follow_more_yes_${job.shortId}`, buttonText: 'כן, עוד הצעות' },
+          { buttonId: `follow_more_no_${job.shortId}`, buttonText: 'לא, סיימתי' },
+        ],
+        'FixItNow 🛠️',
+        'נא לבחור'
+      );
+      job.clientFollowUpSent = true;
+      await job.save();
+      sent++;
+    } catch (e) {
+      errors.push(`#${job.shortId}: ${(e as Error).message}`);
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    candidates: jobs.length,
+    sent,
+    errors: errors.length ? errors : undefined,
+  });
+}
