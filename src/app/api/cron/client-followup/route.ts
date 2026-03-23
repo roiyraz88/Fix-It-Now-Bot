@@ -12,9 +12,9 @@ function clientChatIdFromPhone(clientPhone: string): string {
 }
 
 /**
- * Vercel Cron (or external) – every 5 min.
+ * Scheduled GET – every ~5 min (external cron on Hobby; Vercel Cron on Pro if configured).
  * One-time: sends client the "more offers?" question ~30 min after pros were first notified (clientFollowUpSent prevents repeats).
- * Set CRON_SECRET in env; Vercel cron sends Authorization: Bearer <CRON_SECRET>
+ * Set CRON_SECRET; caller must send Authorization: Bearer <CRON_SECRET>
  */
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;

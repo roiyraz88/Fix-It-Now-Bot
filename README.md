@@ -40,7 +40,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 לאחר שהלקוח אישר חיפוש בעלי מקצוע, נשלחת התראה לבעלי מקצוע. **פעם אחת בלבד** – כ־30 דקות אחרי **ההתראה הראשונה** לבעלי המקצוע – ה־cron שולח ללקוח שאלה עם כפתורי כן/לא (לא חוזר).
 
 - הוסף ב־Vercel (או `.env`) את **`CRON_SECRET`** (מחרוזת אקראית).
-- ב־Vercel: Cron מוגדר ב־`vercel.json` ל־`/api/cron/client-followup` כל 5 דקות. Vercel שולח `Authorization: Bearer <CRON_SECRET>` אוטומטית לפי [התיעוד](https://vercel.com/docs/cron-jobs).
-- בלי Vercel: קרא ל־`GET https://<your-domain>/api/cron/client-followup` עם אותו header כל כמה דקות (למשל cron חיצוני).
+- **תזמון:** ב־Vercel **Hobby** אין cron תכוף (רק יומי) – השתמש ב־cron חיצוני (למשל [cron-job.org](https://cron-job.org)): `GET https://<your-domain>/api/cron/client-followup` כל 5 דקות, עם header `Authorization: Bearer <CRON_SECRET>`.
+- ב־Vercel **Pro** אפשר להגדיר Cron Jobs מהדשבורד או ב־`vercel.json` – ראה [תיעוד Vercel](https://vercel.com/docs/cron-jobs).
 
 אם `CRON_SECRET` לא מוגדר, הקריאה ל־cron תחזיר 503.
