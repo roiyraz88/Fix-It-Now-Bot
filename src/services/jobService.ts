@@ -93,7 +93,7 @@ export async function notifyProfessionalsJobFilledByClient(jobId: string) {
   const professionals = await Professional.find({ verified: true });
   const message =
     `📋 *עבודה #${job.shortId}*\n\n` +
-    `עבודה זו כבר אויישה (הלקוח אישר שאין צורך בהצעות נוספות).\n` +
+    `עבודה זו כבר אויישה על ידי בעל מקצוע אחר של Fix It Now (הלקוח אישר שאין צורך בהצעות נוספות).\n` +
     `אין לפנות ללקוח לגבי קריאה זו.\n\nתודה! 🙏`;
 
   for (const pro of professionals) {

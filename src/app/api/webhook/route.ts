@@ -171,11 +171,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'ok' });
     }
 
-    // 0b. Client follow-up (~30min, one-time): more offers yes / no
+    // 0b. Client follow-up (~30min, one-time): more offers yes / stop (incl. legacy 2-button flow)
     const stateEarly = await ConversationState.findOne({ phone });
     const bidFollow = (selectedButtonId || '').trim();
     const followYes = bidFollow.match(/^follow_more_yes_(\d+)$/);
-    const followNo = bidFollow.match(/^follow_more_no_(\d+)$/);
+    const followNo =
+      bidFollow.match(/^follow_more_no_(\d+)$/) ||
+      bidFollow.match(/^follow_more_closed_pro_(\d+)$/) ||
+      bidFollow.match(/^follow_more_stop_offers_(\d+)$/);
     let jobFollow: IJob | null = null;
     let clientWantsMore: boolean | null = null;
     if (followYes || followNo) {
@@ -185,10 +188,14 @@ export async function POST(request: Request) {
         jobFollow = j;
         clientWantsMore = !!followYes;
       }
-    } else if ((bidFollow === '0' || bidFollow === '1') && stateEarly?.lastJobId) {
+    } else if (
+      (bidFollow === '0' || bidFollow === '1' || bidFollow === '2') &&
+      stateEarly?.lastJobId
+    ) {
       jobFollow = await Job.findById(stateEarly.lastJobId);
       if (jobFollow?.clientFollowUpSent && phonesMatch(phone, jobFollow.clientPhone)) {
-        clientWantsMore = bidFollow === '0';
+        // Order: 0/1 = stop offers, 2 = more offers (matches 3-button follow-up)
+        clientWantsMore = bidFollow === '2';
       } else {
         jobFollow = null;
       }

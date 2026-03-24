@@ -43,10 +43,20 @@ export async function GET(request: Request) {
     try {
       await sendInteractiveButtonsReply(
         clientChatIdFromPhone(job.clientPhone),
-        'האם כבר סגרת עם בעל מקצוע, או שאת/ה מעוניין/ת בהצעות נוספות מבעלי מקצוע?',
+        'האם כבר סגרת עם בעל מקצוע, או שאת/ה מעוניין/ת בהצעות נוספות?',
         [
-          { buttonId: `follow_more_yes_${job.shortId}`, buttonText: 'כן, עוד הצעות' },
-          { buttonId: `follow_more_no_${job.shortId}`, buttonText: 'לא, סיימתי' },
+          {
+            buttonId: `follow_more_closed_pro_${job.shortId}`,
+            buttonText: 'סגרתי, נא להפסיק הצעות',
+          },
+          {
+            buttonId: `follow_more_stop_offers_${job.shortId}`,
+            buttonText: 'לא סגרתי, נא להפסיק הצעות',
+          },
+          {
+            buttonId: `follow_more_yes_${job.shortId}`,
+            buttonText: 'אשמח לקבל הצעות נוספות',
+          },
         ],
         'FixItNow 🛠️',
         'נא לבחור'
