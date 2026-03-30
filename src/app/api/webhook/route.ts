@@ -43,8 +43,25 @@ const PROFESSION_MENU =
 
 טיפ: ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.`;
 
+const PROFESSION_MENU_COOLDOWN_MS = 10 * 60 * 1000;
+
 async function sendProfessionSelection(chatId: string) {
   await sendMessage(chatId, PROFESSION_MENU);
+}
+
+/** Avoids sending the profession menu twice within 10 minutes (duplicate webhooks / rapid re-entry). Persists lastProfessionMenuSentAt. */
+async function sendProfessionSelectionUnlessCooldown(senderId: string, state: { phone: string; lastProfessionMenuSentAt?: Date | null; save: () => Promise<unknown> }) {
+  const now = Date.now();
+  const last = state.lastProfessionMenuSentAt ? new Date(state.lastProfessionMenuSentAt).getTime() : 0;
+  if (last && now - last < PROFESSION_MENU_COOLDOWN_MS) {
+    console.log(
+      `[profession menu] skipped cooldown (${Math.round((now - last) / 1000)}s since last) phone=${state.phone}`
+    );
+    return;
+  }
+  await sendProfessionSelection(senderId);
+  state.lastProfessionMenuSentAt = new Date();
+  await state.save();
 }
 
 export async function POST(request: Request) {
@@ -161,13 +178,12 @@ export async function POST(request: Request) {
       await ConversationState.deleteOne({ phone });
       await ProfessionalState.deleteOne({ phone });
       
-      await ConversationState.create({ 
-        phone, 
-        state: 'choosing_profession', 
-        accumulatedData: {} 
+      const resetState = await ConversationState.create({
+        phone,
+        state: 'choosing_profession',
+        accumulatedData: {},
       });
-
-      await sendProfessionSelection(senderId);
+      await sendProfessionSelectionUnlessCooldown(senderId, resetState);
       return NextResponse.json({ status: 'ok' });
     }
 
@@ -344,7 +360,7 @@ export async function POST(request: Request) {
       if (bid === 'role_client' || txt.includes('לקוח') || txt === 'אני לקוח') {
         state.state = 'choosing_profession';
         await state.save();
-        await sendProfessionSelection(senderId);
+        await sendProfessionSelectionUnlessCooldown(senderId, state);
         return NextResponse.json({ status: 'ok' });
       }
       if (bid === 'role_professional' || txt.includes('בעל מקצוע') || txt === 'אני בעל מקצוע') {
@@ -361,7 +377,7 @@ export async function POST(request: Request) {
       // User sent something else - treat as client, send profession selection
       state.state = 'choosing_profession';
       await state.save();
-      await sendProfessionSelection(senderId);
+      await sendProfessionSelectionUnlessCooldown(senderId, state);
       return NextResponse.json({ status: 'ok' });
     }
 
@@ -406,7 +422,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ status: 'ok' });
       }
       console.log(`[choosing_profession] No match - rawText="${rawText}" txt="${txt}" sel="${sel}" incomingText="${incomingText}"`);
-      await sendProfessionSelection(senderId);
+      await sendProfessionSelectionUnlessCooldown(senderId, state);
       return NextResponse.json({ status: 'ok' });
     }
 
@@ -903,13 +919,20 @@ async function handleClientFlow(state: any, senderId: string, text: string, body
   
   // If waiting for offers - any message resets and starts new conversation as client
   if (state.state === 'waiting_for_offers') {
-    await ConversationState.deleteOne({ phone: state.phone });
-    await ConversationState.create({
-      phone: state.phone,
-      state: 'choosing_profession',
-      accumulatedData: {},
-    });
-    await sendProfessionSelection(senderId);
+    await ConversationState.updateOne(
+      { phone: state.phone },
+      {
+        $set: {
+          state: 'choosing_profession',
+          accumulatedData: {},
+          lastJobId: null,
+          chatHistory: [],
+        },
+        $unset: { completedJobId: 1 },
+      }
+    );
+    const refreshed = await ConversationState.findOne({ phone: state.phone });
+    if (refreshed) await sendProfessionSelectionUnlessCooldown(senderId, refreshed);
     return;
   }
 

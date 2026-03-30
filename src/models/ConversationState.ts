@@ -3,6 +3,8 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface IConversationState extends Document {
   phone: string;
   state: string;
+  /** Last time the “בחר מקצוע” menu was sent; used to avoid duplicate menus within a short window */
+  lastProfessionMenuSentAt?: Date;
   lastJobId?: mongoose.Types.ObjectId;
   chatHistory: { role: 'user' | 'assistant', content: string }[];
   accumulatedData: {
@@ -28,6 +30,7 @@ const ConversationStateSchema: Schema = new Schema({
     type: String, 
     default: 'welcome'
   },
+  lastProfessionMenuSentAt: { type: Date },
   lastJobId: { type: Schema.Types.ObjectId, ref: 'Job' },
   chatHistory: [
     {
