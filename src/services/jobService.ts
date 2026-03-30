@@ -11,7 +11,8 @@ const getProfessionName = (type: string): string => {
     ac: 'מיזוג אוויר',
     painter: 'צביעה',
     handyman: 'הנדימן',
-    contractor: 'שיפוצים'
+    contractor: 'שיפוצים',
+    other: 'אחר'
   };
   return names[type] || type;
 };

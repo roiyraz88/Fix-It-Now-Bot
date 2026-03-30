@@ -111,6 +111,7 @@ function getProblemTypeHebrew(problemType: string): string {
     painter: 'צביעה',
     handyman: 'הנדימן',
     contractor: 'שיפוץ/קבלן',
+    other: 'אחר / כללי',
   };
   return map[problemType] || 'תיקון בית כללי';
 }

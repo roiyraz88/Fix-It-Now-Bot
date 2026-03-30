@@ -38,8 +38,9 @@ const PROFESSION_MENU =
 2 - חשמלאי ⚡
 3 - הנדימן 🛠️
 4 - צבעי 🎨
+5 - אחר 📋
 
-נא לשלוח את מספר בעל המקצוע הנדרש בלבד(אם אתם מעוניינים באינסטלטור שלחו את הספרה '1').
+נא לשלוח את מספר בעל המקצוע הנדרש בלבד (למשל אינסטלטור – '1', אחר – '5').
 
 טיפ: ניתן לשלוח '9' בכל שלב כדי לאתחל את השיחה מחדש.`;
 
@@ -254,7 +255,7 @@ export async function POST(request: Request) {
     }
     const stateForOrder = await ConversationState.findOne({ phone });
     const isChoosingProfession = stateForOrder?.state === 'choosing_profession';
-    const textLooksLikeProfessionNum = /^[1-4]$/.test(rawText);
+    const textLooksLikeProfessionNum = /^[1-5]$/.test(rawText);
 
     let jobIdFromMessage = '';
     if (selectedButtonId?.startsWith('apply_job_')) {
@@ -314,7 +315,7 @@ export async function POST(request: Request) {
       const phoneAlt = phone.startsWith('972') ? '0' + phone.slice(3) : (phone.startsWith('0') ? '972' + phone.slice(1) : phone);
       const pro = await Professional.findOne({ $or: [{ phone, verified: true }, { phone: phoneAlt, verified: true }] });
       if (pro) {
-        const jobNumMatch = rawText.match(/^#?(\d+)$/) && !/^[1-4]$/.test((rawText.match(/^#?(\d+)$/) || [])[1] || '');
+        const jobNumMatch = rawText.match(/^#?(\d+)$/) && !/^[1-5]$/.test((rawText.match(/^#?(\d+)$/) || [])[1] || '');
         if (jobNumMatch) {
           const num = parseInt((rawText.match(/^#?(\d+)$/) || [])[1] || '0', 10);
           const job = await Job.findOne({ shortId: num });
@@ -392,12 +393,14 @@ export async function POST(request: Request) {
         prof_electrician: { problemType: 'electrician', desc: 'חשמלאי' },
         prof_handyman: { problemType: 'handyman', desc: 'הנדימן' },
         prof_painter: { problemType: 'painter', desc: 'צבעי' },
+        prof_other: { problemType: 'other', desc: 'אחר' },
       };
       const numMap: Record<string, { problemType: string; desc: string }> = {
         '1': { problemType: 'plumber', desc: 'אינסטלטור' },
         '2': { problemType: 'electrician', desc: 'חשמלאי' },
         '3': { problemType: 'handyman', desc: 'הנדימן' },
         '4': { problemType: 'painter', desc: 'צבעי' },
+        '5': { problemType: 'other', desc: 'אחר' },
       };
       const sel = (selectedButtonId || '').trim().toLowerCase();
       let prof = profMap[sel];
@@ -405,13 +408,16 @@ export async function POST(request: Request) {
         prof = numMap[sel] ?? numMap[txt] ?? numMap[rawText] ?? null;
         if (!prof) {
           const parsed = parseInt(txt, 10);
-          if (!isNaN(parsed) && parsed >= 1 && parsed <= 4) prof = numMap[String(parsed)];
+          if (!isNaN(parsed) && parsed >= 1 && parsed <= 5) prof = numMap[String(parsed)];
         }
         if (!prof) {
           if (/אינסטלטור/.test(txt)) prof = { problemType: 'plumber', desc: 'אינסטלטור' };
           else if (/חשמלאי/.test(txt)) prof = { problemType: 'electrician', desc: 'חשמלאי' };
           else if (/הנדימן/.test(txt)) prof = { problemType: 'handyman', desc: 'הנדימן' };
           else if (/צבעי/.test(txt)) prof = { problemType: 'painter', desc: 'צבעי' };
+          else if (txt.replace(/\s/g, '') === 'אחר' || /^5\s*[-–]?\s*אחר/i.test(txt)) {
+            prof = { problemType: 'other', desc: 'אחר' };
+          }
         }
       }
       if (prof) {

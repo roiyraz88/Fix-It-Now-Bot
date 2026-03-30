@@ -5,7 +5,7 @@ export interface IJob extends Document {
   clientPhone: string;
   description: string;
   detailedDescription?: string;
-  problemType: 'plumber' | 'electrician' | 'ac' | 'painter' | 'handyman' | 'contractor' | null;
+  problemType: 'plumber' | 'electrician' | 'ac' | 'painter' | 'handyman' | 'contractor' | 'other' | null;
   city: string | null;
   urgency: 'low' | 'medium' | 'high' | null;
   photoUrl?: string;
@@ -24,7 +24,7 @@ const JobSchema: Schema = new Schema({
   clientPhone: { type: String, required: true },
   description: { type: String, required: true },
   detailedDescription: { type: String },
-  problemType: { type: String, enum: ['plumber', 'electrician', 'ac', 'painter', 'handyman', 'contractor', null], default: null },
+  problemType: { type: String, enum: ['plumber', 'electrician', 'ac', 'painter', 'handyman', 'contractor', 'other', null], default: null },
   city: { type: String, default: null },
   urgency: { type: String, enum: ['low', 'medium', 'high', null], default: null },
   photoUrl: { type: String },
