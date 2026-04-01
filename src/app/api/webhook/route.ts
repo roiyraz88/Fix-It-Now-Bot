@@ -1034,7 +1034,7 @@ async function finalizeJobCreation(state: any, senderId: string) {
   const counter = await Counter.findOneAndUpdate(
     { id: 'jobId' },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true }
+    { returnDocument: 'after', upsert: true }
   );
 
   console.log('Generated shortId:', counter.seq);
