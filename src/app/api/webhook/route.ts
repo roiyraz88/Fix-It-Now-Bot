@@ -237,6 +237,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: 'ok' });
     }
 
+    // 0c. Verified professional: job broadcast כן / לא (no need to type job #)
+    const bidProJob = (selectedButtonId || '').trim();
+    const proJobYes = bidProJob.match(/^pro_job_yes_(\d+)$/);
+    const proJobNo = bidProJob.match(/^pro_job_no_(\d+)$/);
+    if (proJobYes || proJobNo) {
+      const phoneAltPro = phone.startsWith('972')
+        ? '0' + phone.slice(3)
+        : phone.startsWith('0')
+          ? '972' + phone.slice(1)
+          : phone;
+      const verifiedPro = await Professional.findOne({
+        $or: [{ phone, verified: true }, { phone: phoneAltPro, verified: true }],
+      });
+      if (verifiedPro) {
+        if (proJobNo) {
+          return NextResponse.json({ status: 'ok' });
+        }
+        const sid = parseInt(proJobYes![1], 10);
+        const job = await Job.findOne({ shortId: sid });
+        if (job) {
+          console.log(`[Job] pro_job_yes: sending client contact for #${sid} to ${phone}`);
+          await ProfessionalState.findOneAndUpdate(
+            { phone },
+            { step: 'idle', currentJobId: undefined },
+            { upsert: false }
+          );
+          await sendClientContactToProfessional(senderId, job);
+        }
+        return NextResponse.json({ status: 'ok' });
+      }
+      return NextResponse.json({ status: 'ok' });
+    }
+
     // 1. Job number reply - HIGHEST PRIORITY: professional replied with job # to get client contact
     let rawText = (incomingText || '').trim();
     // Fallback: if empty, deep-scan body for "74" etc (Green API format can vary)

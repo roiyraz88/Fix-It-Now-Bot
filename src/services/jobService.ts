@@ -1,7 +1,7 @@
 import Job from '@/models/Job';
 import Professional from '@/models/Professional';
 import ProfessionalState from '@/models/ProfessionalState';
-import { sendMessage, sendContact, getContactInfo } from '@/lib/green-api';
+import { sendMessage, sendContact, getContactInfo, sendInteractiveButtonsReply } from '@/lib/green-api';
 import dbConnect from '@/lib/mongodb';
 
 const getProfessionName = (type: string): string => {
@@ -49,12 +49,24 @@ export async function findAndNotifyProfessionals(jobId: string) {
     message += `*פירוט:* ${job.detailedDescription}\n`;
   }
   message += `*עיר:* ${job.city || 'לא צוין'}\n\n`;
-  message += `לקבלת הטלפון של הלקוח השב עם המספר ${job.shortId}`;
+  message += `רוצה לקבל את פרטי הקשר של הלקוח?`;
+
+  const sid = job.shortId;
+  const jobButtons = [
+    { buttonId: `pro_job_yes_${sid}`, buttonText: 'כן' },
+    { buttonId: `pro_job_no_${sid}`, buttonText: 'לא' },
+  ];
 
   for (const pro of professionals) {
     const cleanPhone = pro.phone.replace(/\D/g, '');
     try {
-      await sendMessage(cleanPhone, message);
+      await sendInteractiveButtonsReply(
+        cleanPhone,
+        message,
+        jobButtons,
+        'FixItNow 🛠️',
+        'לחץ כן כדי לקבל פרטים'
+      );
       console.log(`Alert sent to ${pro.name} for job #${job.shortId}`);
     } catch (err) {
       console.error(`Failed to notify ${pro.name}:`, (err as Error).message);
@@ -73,12 +85,24 @@ export async function notifyProfessionalsJobStillOpen(jobId: string) {
   message += `הלקוח עדיין מעוניין בהצעות – העבודה *עדיין לא אויישה*.\n\n`;
   message += `*סוג עבודה:* ${getProfessionName(job.problemType)}\n`;
   message += `*עיר:* ${job.city || 'לא צוין'}\n\n`;
-  message += `לקבלת פרטי הקשר שלח את המספר *${job.shortId}*`;
+  message += `רוצה לקבל את פרטי הקשר של הלקוח?`;
+
+  const sid = job.shortId;
+  const jobButtons = [
+    { buttonId: `pro_job_yes_${sid}`, buttonText: 'כן' },
+    { buttonId: `pro_job_no_${sid}`, buttonText: 'לא' },
+  ];
 
   for (const pro of professionals) {
     const cleanPhone = pro.phone.replace(/\D/g, '');
     try {
-      await sendMessage(cleanPhone, message);
+      await sendInteractiveButtonsReply(
+        cleanPhone,
+        message,
+        jobButtons,
+        'FixItNow 🛠️',
+        'לחץ כן כדי לקבל פרטים'
+      );
     } catch (err) {
       console.error(`notifyProfessionalsJobStillOpen ${pro.name}:`, (err as Error).message);
     }
