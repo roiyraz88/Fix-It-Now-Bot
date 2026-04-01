@@ -27,9 +27,14 @@ export default function Home() {
       try {
         const res = await fetch('/api/db-check');
         const data = await res.json();
-        setDbStatus(data.status === 'connected' ? 'Connected' : 'Error');
+        if (data.status === 'connected' && data.ok !== false) {
+          setDbStatus('Connected');
+        } else {
+          const detail = [data.message, data.hint].filter(Boolean).join(' — ');
+          setDbStatus(detail ? `Error: ${detail}` : 'Error');
+        }
       } catch (error) {
-        setDbStatus('Error');
+        setDbStatus('Error (no response)');
       }
     }
 
