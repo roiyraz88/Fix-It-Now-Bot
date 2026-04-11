@@ -23,11 +23,18 @@ const formatPhone = (phone: string): string => {
   return phone;
 };
 
+const ADMIN_KEY_STORAGE = "fixitnow_admin_secret";
+
 export default function ProfessionalsAdmin() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [adminSecret, setAdminSecret] = useState("");
+  const [broadcastText, setBroadcastText] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvImportRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -41,7 +48,32 @@ export default function ProfessionalsAdmin() {
 
   useEffect(() => {
     fetchProfessionals();
+    try {
+      setAdminSecret(sessionStorage.getItem(ADMIN_KEY_STORAGE) || "");
+    } catch {
+      /* ignore */
+    }
   }, []);
+
+  const adminHeaders = (): HeadersInit => {
+    const h: Record<string, string> = {};
+    if (adminSecret.trim()) {
+      h.Authorization = `Bearer ${adminSecret.trim()}`;
+    }
+    return h;
+  };
+
+  const persistAdminSecret = () => {
+    try {
+      if (adminSecret.trim()) {
+        sessionStorage.setItem(ADMIN_KEY_STORAGE, adminSecret.trim());
+      } else {
+        sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
 
   const fetchProfessionals = async () => {
     try {
@@ -136,12 +168,182 @@ export default function ProfessionalsAdmin() {
     }
   };
 
+  const handleExportCsv = async () => {
+    persistAdminSecret();
+    try {
+      const res = await fetch("/api/professionals/export", {
+        headers: adminHeaders(),
+      });
+      if (res.status === 401) {
+        alert("נדרש מפתח ניהול (הגדר ADMIN_SECRET בשרת והזן למטה)");
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert((err as { error?: string }).error || "ייצוא נכשל");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `professionals-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      alert("שגיאה בייצוא");
+      console.error(e);
+    }
+  };
+
+  const handleBroadcast = async () => {
+    const msg = broadcastText.trim();
+    if (!msg) {
+      alert("נא להזין הודעה");
+      return;
+    }
+    if (
+      !confirm(
+        "לשלוח את ההודעה בוואטסאפ לכל בעלי המקצוע הרשומים במערכת?"
+      )
+    ) {
+      return;
+    }
+    persistAdminSecret();
+    setBroadcasting(true);
+    try {
+      const res = await fetch("/api/professionals/broadcast", {
+        method: "POST",
+        headers: { ...adminHeaders(), "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        alert("נדרש מפתח ניהול (הגדר ADMIN_SECRET בשרת והזן למטה)");
+        return;
+      }
+      if (!res.ok) {
+        alert((data as { error?: string }).error || "שליחה נכשלה");
+        return;
+      }
+      const d = data as { sent?: number; total?: number; errors?: string[] };
+      let t = `נשלח: ${d.sent}/${d.total}`;
+      if (d.errors?.length) t += `\nשגיאות: ${d.errors.slice(0, 5).join("; ")}`;
+      alert(t);
+      setBroadcastText("");
+    } catch (e) {
+      alert("שגיאה בשליחה");
+      console.error(e);
+    } finally {
+      setBroadcasting(false);
+    }
+  };
+
+  const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    persistAdminSecret();
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/professionals/import", {
+        method: "POST",
+        headers: adminHeaders(),
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        alert("נדרש מפתח ניהול (הגדר ADMIN_SECRET בשרת והזן למטה)");
+        return;
+      }
+      if (!res.ok) {
+        alert((data as { error?: string }).error || "ייבוא נכשל");
+        return;
+      }
+      const d = data as { created?: number; updated?: number; errors?: string[] };
+      let t = `נוצרו: ${d.created}, עודכנו: ${d.updated}`;
+      if (d.errors?.length) t += `\n${d.errors.slice(0, 8).join("\n")}`;
+      alert(t);
+      fetchProfessionals();
+    } catch (err) {
+      alert("שגיאה בייבוא");
+      console.error(err);
+    } finally {
+      setImporting(false);
+      if (csvImportRef.current) csvImportRef.current.value = "";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 text-gray-900">
       <div className="max-w-6xl mx-auto">
         <h1 className="text-2xl sm:text-3xl font-bold mb-6 sm:mb-8 text-green-700">
           ניהול בעלי מקצוע - FixItNow
         </h1>
+
+        <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 mb-6 space-y-4">
+          <h2 className="text-lg font-bold text-gray-900">כלים</h2>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              מפתח ניהול (אופציונלי — נדרש רק אם הוגדר{" "}
+              <code className="text-xs bg-gray-100 px-1 rounded">ADMIN_SECRET</code>{" "}
+              ב-Vercel)
+            </label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={adminSecret}
+              onChange={(e) => setAdminSecret(e.target.value)}
+              onBlur={persistAdminSecret}
+              placeholder="Bearer token — נשמר בדפדפן (session)"
+              className="block w-full max-w-md border border-gray-300 rounded-md p-2 bg-white text-sm"
+            />
+          </div>
+          <div className="flex flex-wrap gap-3 items-center">
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              className="py-2 px-4 bg-gray-800 text-white rounded-md font-medium hover:bg-gray-900 min-h-[44px]"
+            >
+              ייצוא CSV
+            </button>
+            <input
+              ref={csvImportRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              id="csv-import"
+              onChange={handleImportCsv}
+            />
+            <label
+              htmlFor="csv-import"
+              className={`cursor-pointer inline-flex items-center py-2 px-4 bg-blue-600 text-white rounded-md font-medium hover:bg-blue-700 min-h-[44px] ${importing ? "opacity-50 pointer-events-none" : ""}`}
+            >
+              {importing ? "מייבא…" : "ייבוא CSV"}
+            </label>
+          </div>
+          <div className="border-t border-gray-200 pt-4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              הודעת וואטסאפ לכל בעלי המקצוע במערכת
+            </label>
+            <textarea
+              value={broadcastText}
+              onChange={(e) => setBroadcastText(e.target.value)}
+              rows={3}
+              placeholder="הטקסט יישלח דרך Green API לכל הרשומים (לפי מספר הטלפון בשדה)"
+              className="block w-full border border-gray-300 rounded-md p-2 bg-white text-sm mb-2"
+            />
+            <button
+              type="button"
+              onClick={handleBroadcast}
+              disabled={broadcasting}
+              className="py-2 px-4 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 disabled:opacity-50 min-h-[44px]"
+            >
+              {broadcasting ? "שולח…" : "שלח לכולם"}
+            </button>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 h-fit">
