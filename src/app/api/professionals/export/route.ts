@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Professional from '@/models/Professional';
-import { requireAdmin } from '@/lib/admin-auth';
 
 const CSV_COLUMNS = [
   'name',
@@ -21,10 +20,7 @@ function escapeCsvCell(value: unknown): string {
   return s;
 }
 
-export async function GET(request: Request) {
-  const unauthorized = requireAdmin(request);
-  if (unauthorized) return unauthorized;
-
+export async function GET() {
   await dbConnect();
   const pros = await Professional.find({}).sort({ name: 1 }).lean();
 

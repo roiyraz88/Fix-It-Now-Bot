@@ -2,12 +2,8 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Professional from '@/models/Professional';
 import { sendMessage } from '@/lib/green-api';
-import { requireAdmin } from '@/lib/admin-auth';
 
 export async function POST(request: Request) {
-  const unauthorized = requireAdmin(request);
-  if (unauthorized) return unauthorized;
-
   try {
     const body = await request.json();
     const message = (body.message as string)?.trim();

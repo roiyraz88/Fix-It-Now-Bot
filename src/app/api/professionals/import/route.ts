@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Professional from '@/models/Professional';
-import { requireAdmin } from '@/lib/admin-auth';
 
 const VALID_PROFESSIONS = new Set([
   'plumber',
@@ -59,9 +58,6 @@ function parseBool(v: string): boolean {
 }
 
 export async function POST(request: Request) {
-  const unauthorized = requireAdmin(request);
-  if (unauthorized) return unauthorized;
-
   try {
     const ct = request.headers.get('content-type') || '';
     let csvText: string;

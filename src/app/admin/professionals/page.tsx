@@ -23,13 +23,10 @@ const formatPhone = (phone: string): string => {
   return phone;
 };
 
-const ADMIN_KEY_STORAGE = "fixitnow_admin_secret";
-
 export default function ProfessionalsAdmin() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [adminSecret, setAdminSecret] = useState("");
   const [broadcastText, setBroadcastText] = useState("");
   const [broadcasting, setBroadcasting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -48,32 +45,7 @@ export default function ProfessionalsAdmin() {
 
   useEffect(() => {
     fetchProfessionals();
-    try {
-      setAdminSecret(sessionStorage.getItem(ADMIN_KEY_STORAGE) || "");
-    } catch {
-      /* ignore */
-    }
   }, []);
-
-  const adminHeaders = (): HeadersInit => {
-    const h: Record<string, string> = {};
-    if (adminSecret.trim()) {
-      h.Authorization = `Bearer ${adminSecret.trim()}`;
-    }
-    return h;
-  };
-
-  const persistAdminSecret = () => {
-    try {
-      if (adminSecret.trim()) {
-        sessionStorage.setItem(ADMIN_KEY_STORAGE, adminSecret.trim());
-      } else {
-        sessionStorage.removeItem(ADMIN_KEY_STORAGE);
-      }
-    } catch {
-      /* ignore */
-    }
-  };
 
   const fetchProfessionals = async () => {
     try {
@@ -169,15 +141,8 @@ export default function ProfessionalsAdmin() {
   };
 
   const handleExportCsv = async () => {
-    persistAdminSecret();
     try {
-      const res = await fetch("/api/professionals/export", {
-        headers: adminHeaders(),
-      });
-      if (res.status === 401) {
-        alert("נדרש מפתח ניהול (הגדר ADMIN_SECRET בשרת והזן למטה)");
-        return;
-      }
+      const res = await fetch("/api/professionals/export");
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         alert((err as { error?: string }).error || "ייצוא נכשל");
@@ -209,19 +174,14 @@ export default function ProfessionalsAdmin() {
     ) {
       return;
     }
-    persistAdminSecret();
     setBroadcasting(true);
     try {
       const res = await fetch("/api/professionals/broadcast", {
         method: "POST",
-        headers: { ...adminHeaders(), "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        alert("נדרש מפתח ניהול (הגדר ADMIN_SECRET בשרת והזן למטה)");
-        return;
-      }
       if (!res.ok) {
         alert((data as { error?: string }).error || "שליחה נכשלה");
         return;
@@ -242,21 +202,15 @@ export default function ProfessionalsAdmin() {
   const handleImportCsv = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    persistAdminSecret();
     setImporting(true);
     try {
       const fd = new FormData();
       fd.append("file", file);
       const res = await fetch("/api/professionals/import", {
         method: "POST",
-        headers: adminHeaders(),
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        alert("נדרש מפתח ניהול (הגדר ADMIN_SECRET בשרת והזן למטה)");
-        return;
-      }
       if (!res.ok) {
         alert((data as { error?: string }).error || "ייבוא נכשל");
         return;
@@ -284,22 +238,6 @@ export default function ProfessionalsAdmin() {
 
         <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200 mb-6 space-y-4">
           <h2 className="text-lg font-bold text-gray-900">כלים</h2>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              מפתח ניהול (אופציונלי — נדרש רק אם הוגדר{" "}
-              <code className="text-xs bg-gray-100 px-1 rounded">ADMIN_SECRET</code>{" "}
-              ב-Vercel)
-            </label>
-            <input
-              type="password"
-              autoComplete="off"
-              value={adminSecret}
-              onChange={(e) => setAdminSecret(e.target.value)}
-              onBlur={persistAdminSecret}
-              placeholder="Bearer token — נשמר בדפדפן (session)"
-              className="block w-full max-w-md border border-gray-300 rounded-md p-2 bg-white text-sm"
-            />
-          </div>
           <div className="flex flex-wrap gap-3 items-center">
             <button
               type="button"
